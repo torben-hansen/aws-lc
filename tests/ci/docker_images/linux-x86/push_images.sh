@@ -73,6 +73,11 @@ docker tag amazonlinux-2:gcc-7x ${ECS_REPO}:amazonlinux-2_gcc-7x_latest
 docker push ${ECS_REPO}:amazonlinux-2_gcc-7x_latest
 docker push ${ECS_REPO}:amazonlinux-2_gcc-7x_`date +%Y-%m-%d`
 
+docker tag amazonlinux-2:valgrind ${ECS_REPO}:amazonlinux-2_gcc-7x_valgrind_`date +%Y-%m-%d`
+docker tag amazonlinux-2:valgrind ${ECS_REPO}:amazonlinux-2_gcc-7x_valgrind_latest
+docker push ${ECS_REPO}:amazonlinux-2_gcc-7x_valgrind_latest
+docker push ${ECS_REPO}:amazonlinux-2_gcc-7x_valgrind_`date +%Y-%m-%d`
+
 docker tag fedora-31:gcc-9x ${ECS_REPO}:fedora-31_gcc-9x_`date +%Y-%m-%d`
 docker tag fedora-31:gcc-9x ${ECS_REPO}:fedora-31_gcc-9x_latest
 docker push ${ECS_REPO}:fedora-31_gcc-9x_latest
