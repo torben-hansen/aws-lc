@@ -170,7 +170,11 @@ func runTestOnce(test test, mallocNumToFail int64) (passed bool, err error) {
 	}
 	var cmd *exec.Cmd
 	if *useValgrind {
-		cmd = valgrindOf(false, test.ValgrindSupp[0], prog, args...)
+		supp := ""
+		if len(test.ValgrindSupp) > 0 {
+			supp = test.ValgrindSupp[0]
+		}
+		cmd = valgrindOf(false, supp, prog, args...)
 	} else if *useCallgrind {
 		cmd = callgrindOf(prog, args...)
 	} else if *useGDB {
@@ -416,6 +420,11 @@ func main() {
 	go func() {
 		for _, baseTest := range testCases {
 			test := test{Test: baseTest}
+			if *useValgrind {
+				if test.SkipValgrind {
+					continue
+				}
+			}
 			if *useSDE {
 				if test.SkipSDE {
 					continue

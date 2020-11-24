@@ -20,10 +20,11 @@ import (
 )
 
 type Test struct {
-	Cmd            []string `json:"cmd"`
-	Env            []string `json:"env"`
-	SkipSDE        bool     `json:"skip_sde"`
-	ValgrindSupp   []string `json:"valgrind_supp"`
+	Cmd           	[]string `json:"cmd"`
+	Env           	[]string `json:"env"`
+	SkipSDE       	bool     `json:"skip_sde"`
+	SkipValgrind 	bool 	 `json:"skip_valgrind"`
+	ValgrindSupp  	[]string `json:"valgrind_supp"`
 }
 
 func ParseTestConfig(filename string) ([]Test, error) {
