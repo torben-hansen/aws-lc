@@ -38,7 +38,7 @@ import (
 
 var (
 	useValgrind     = flag.Bool("valgrind", false, "If true, run code under valgrind")
-	valgrindSuppDir = flag.String("valgrind-supp-dir", ".", "The path to find the sde binary.")
+	valgrindSuppDir = flag.String("valgrind-supp-dir", ".", "The directory where Valgrind suppression files can be found.")
 	useCallgrind    = flag.Bool("callgrind", false, "If true, run code under valgrind to generate callgrind traces.")
 	useGDB          = flag.Bool("gdb", false, "If true, run BoringSSL code under gdb")
 	useSDE          = flag.Bool("sde", false, "If true, run BoringSSL code under Intel's SDE for each supported chip")
@@ -110,7 +110,6 @@ func valgrindOf(dbAttach bool, supp string, path string, args ...string) *exec.C
 	valgrindArgs := []string{"--error-exitcode=99", "--track-origins=yes", "--leak-check=full"}
 	if len(supp) > 1 {
 		valgrindArgs = append(valgrindArgs, "--suppressions=" + *valgrindSuppDir + "/" + supp)
-		fmt.Sprintf("--suppressions=%s/%s", valgrindSuppDir, supp)
 	}
 	if dbAttach {
 		valgrindArgs = append(valgrindArgs, "--db-attach=yes", "--db-command=xterm -e gdb -nw %f %p")

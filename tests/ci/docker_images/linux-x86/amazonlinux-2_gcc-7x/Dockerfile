@@ -9,7 +9,7 @@ SHELL ["/bin/bash", "-c"]
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/add-repositories.html
 
 # gcc 7.3.1 is the latest version versions `yum --showduplicates list gcc`
-# Install Valgrind for Valgrind test target eventhough it is not needed for the base test target.
+# Install Valgrind for Valgrind test target even though it is not needed for the base test target.
 RUN set -ex && \
     yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
     yum -y update && yum install -y \
