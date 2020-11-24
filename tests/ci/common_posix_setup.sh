@@ -38,7 +38,7 @@ function build_and_test {
   run_test 
 }
 
-function run_tests_valgrind {
+function run_test_valgrind {
   $BUILD_COMMAND -C test_build_dir run_tests_valgrind
 }
 
