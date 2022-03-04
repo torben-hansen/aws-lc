@@ -713,16 +713,13 @@ int RSA_validate_key(const RSA *rsa,
     return 0;
   }
 
-// ACCP supports RSA private keys with |d| and |n| only.
-// This translates to a PKCS8 |RSAPrivateKey| structure with all zero
-// members except for |d| and |n|.
-// We support RSA private key operations with just those two values.
-// But since the |RSAPrivateKey| parsing function `RSA_parse_private_key()`
-// calls into here, we need to handle this special case. Otherwise the
-// key validation code will choke on the missing values.
-
   if (!rsa_check_public_key(key, key_enc_type)) {
     return 0;
+  }
+
+  if (key_enc_type == RSA_STRIPPED_KEY) {
+    // stripped keys doesn't have more parameters we can verify.
+    return 1;
   }
 
   if (key->d == NULL || key->p == NULL) {
