@@ -73,7 +73,7 @@
 #include "../rand/fork_detect.h"
 
 
-int rsa_check_public_key(const RSA *rsa) {
+int rsa_check_public_key(const RSA *rsa, rsa_asn1_key_encoding_t key_enc_type) {
   if (rsa->n == NULL || rsa->e == NULL) {
     OPENSSL_PUT_ERROR(RSA, RSA_R_VALUE_MISSING);
     return 0;
@@ -84,6 +84,23 @@ int rsa_check_public_key(const RSA *rsa) {
     OPENSSL_PUT_ERROR(RSA, RSA_R_MODULUS_TOO_LARGE);
     return 0;
   }
+
+  // Verify |n > e|. Comparing |n_bits| to |kMaxExponentBits| is a small
+  // shortcut to comparing |n| and |e| directly. In reality, |kMaxExponentBits|
+  // is much smaller than the minimum RSA key size that any application should
+  // accept.
+  if (n_bits <= kMaxExponentBits) {
+    OPENSSL_PUT_ERROR(RSA, RSA_R_KEY_SIZE_TOO_SMALL);
+    return 0;
+  }
+
+  if (key_enc_type == RSA_STRIPPED_KEY) {
+    // Stripped RSA key doesn't have |e| set. Nothing more to do here.
+    return 1;
+  }
+
+  // Slighty more thorough validation of |n > e|/
+  assert(BN_ucmp(rsa->n, rsa->e) > 0);
 
   // Mitigate DoS attacks by limiting the exponent size. 33 bits was chosen as
   // the limit based on the recommendations in [1] and [2]. Windows CryptoAPI
@@ -104,16 +121,6 @@ int rsa_check_public_key(const RSA *rsa) {
     OPENSSL_PUT_ERROR(RSA, RSA_R_BAD_E_VALUE);
     return 0;
   }
-
-  // Verify |n > e|. Comparing |n_bits| to |kMaxExponentBits| is a small
-  // shortcut to comparing |n| and |e| directly. In reality, |kMaxExponentBits|
-  // is much smaller than the minimum RSA key size that any application should
-  // accept.
-  if (n_bits <= kMaxExponentBits) {
-    OPENSSL_PUT_ERROR(RSA, RSA_R_KEY_SIZE_TOO_SMALL);
-    return 0;
-  }
-  assert(BN_ucmp(rsa->n, rsa->e) > 0);
 
   return 1;
 }
@@ -1290,7 +1297,7 @@ static int rsa_generate_key_impl(RSA *rsa, int bits, const BIGNUM *e_value,
   // The key generation process is complex and thus error-prone. It could be
   // disastrous to generate and then use a bad key so double-check that the key
   // makes sense.
-  if (!RSA_check_key(rsa)) {
+  if (!RSA_validate_key(rsa, RSA_CRT_KEY)) {
     OPENSSL_PUT_ERROR(RSA, RSA_R_INTERNAL_ERROR);
     goto err;
   }

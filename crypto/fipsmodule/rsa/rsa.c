@@ -687,7 +687,8 @@ static int check_mod_inverse(int *out_ok, const BIGNUM *a, const BIGNUM *ainv,
   return ret;
 }
 
-int RSA_check_key(const RSA *key) {
+int RSA_validate_key(const RSA *rsa,
+  rsa_asn1_key_encoding_t key_enc_type) {
   // TODO(davidben): RSA key initialization is spread across
   // |rsa_check_public_key|, |RSA_check_key|, |freeze_private_key|, and
   // |BN_MONT_CTX_set_locked| as a result of API issues. See
@@ -697,10 +698,6 @@ int RSA_check_key(const RSA *key) {
   if (RSA_is_opaque(key)) {
     // Opaque keys can't be checked.
     return 1;
-  }
-
-  if (!rsa_check_public_key(key)) {
-    return 0;
   }
 
   if ((key->p != NULL) != (key->q != NULL)) {
@@ -713,6 +710,18 @@ int RSA_check_key(const RSA *key) {
   if (key->d != NULL &&
       (BN_is_negative(key->d) || BN_cmp(key->d, key->n) >= 0)) {
     OPENSSL_PUT_ERROR(RSA, RSA_R_D_OUT_OF_RANGE);
+    return 0;
+  }
+
+// ACCP supports RSA private keys with |d| and |n| only.
+// This translates to a PKCS8 |RSAPrivateKey| structure with all zero
+// members except for |d| and |n|.
+// We support RSA private key operations with just those two values.
+// But since the |RSAPrivateKey| parsing function `RSA_parse_private_key()`
+// calls into here, we need to handle this special case. Otherwise the
+// key validation code will choke on the missing values.
+
+  if (!rsa_check_public_key(key, key_enc_type)) {
     return 0;
   }
 
@@ -816,6 +825,10 @@ out:
   return ok;
 }
 
+int RSA_check_key(const RSA *key) {
+  return RSA_validate_key(rsa, RSA_CRT_KEY);
+}
+
 
 // This is the product of the 132 smallest odd primes, from 3 to 751.
 static const BN_ULONG kSmallFactorsLimbs[] = {
@@ -845,7 +858,7 @@ int RSA_check_fips(RSA *key) {
     return 0;
   }
 
-  if (!RSA_check_key(key)) {
+  if (!RSA_validate_key(rsa, RSA_CRT_KEY)) {
     return 0;
   }
 
