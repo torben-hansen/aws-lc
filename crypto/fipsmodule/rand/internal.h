@@ -129,6 +129,9 @@ OPENSSL_INLINE int have_fast_rdrand(void) {
 #define MAX_BACKOFF_RETRIES 9
 OPENSSL_EXPORT void HAZMAT_set_urandom_test_mode_for_testing(void);
 
+OPENSSL_EXPORT int init_entropy_pool(void);
+OPENSSL_EXPORT int start_entropy_pool_thread(void);
+
 #if defined(__cplusplus)
 }  // extern C
 #endif
