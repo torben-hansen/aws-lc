@@ -107,11 +107,14 @@ static bool entropy_pool_ensure_can_add_entropy(size_t length_of_entropy_to_add)
 	return false;
 }
 
+
+// Managing the circular buffer here is pretty complex...
 static int add_entropy_to_entropy_pool(void) {
 
 	if (entropy_pool_ensure_can_add_entropy(ENTROPY_POOL_ADD_ENTROPY_SIZE) == false) {
-		entropy_pool_at_error();
-		return 0;
+		// This is not an error. We just have too much available entropy in the
+		// pool already.
+		return 1
 	}
 
 	uint8_t fake_entropy[ENTROPY_POOL_ADD_ENTROPY_SIZE] = { 0 };
@@ -136,6 +139,8 @@ static int add_entropy_to_entropy_pool(void) {
 	memcpy(&entropy_pool_state.pool[entropy_pool_state.index_first_unavailable_byte_index],
 			fake_entropy,
 			number_of_bytes_that_wraps_around);
+
+	entropy_pool_state.index_first_unavailable_byte_index
 
 	return 1;
 }
@@ -226,6 +231,12 @@ int init_entropy_pool(void) {
 
 int start_entropy_pool_thread(void) {
 	return entropy_pool_loop();
+}
+
+int get_entropy_from_entropy_pool(size_t requested_entropy_length) {
+
+
+	return 1;
 }
 
 
