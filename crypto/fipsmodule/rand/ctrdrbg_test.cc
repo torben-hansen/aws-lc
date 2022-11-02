@@ -21,12 +21,13 @@
 #include "../../test/file_test.h"
 #include "../../test/test_util.h"
 
+TEST(RandPoolTests, ThreadPoolBasic) {
+
+  ASSERT_TRUE(test_it() == 1);
+
+}
 
 TEST(CTRDRBGTest, Basic) {
-
-  ASSERT_TRUE(init_entropy_pool() == 1);
-
-  ASSERT_TRUE(start_entropy_pool_thread() == 1);
 
   const uint8_t kSeed[CTR_DRBG_ENTROPY_LEN] = {
       0xe4, 0xbc, 0x23, 0xc5, 0x08, 0x9a, 0x19, 0xd8, 0x6f, 0x41, 0x19, 0xcb,

@@ -132,6 +132,8 @@ OPENSSL_EXPORT void HAZMAT_set_urandom_test_mode_for_testing(void);
 OPENSSL_EXPORT int init_entropy_pool(void);
 OPENSSL_EXPORT int start_entropy_pool_thread(void);
 
+OPENSSL_EXPORT int test_it(void);
+
 #if defined(__cplusplus)
 }  // extern C
 #endif
