@@ -216,22 +216,82 @@ static int rdrand(uint8_t *buf, size_t len) {
 
 #if defined(BORINGSSL_FIPS)
 
-static void CRYPTO_get_fips_seed(uint8_t *out_entropy, size_t out_entropy_len,
-                             int *out_want_additional_input) {
-  *out_want_additional_input = 0;
-  // Every thread has its own Jitter instance so we fetch the one assigned
-  // to the current thread.
+#define DEBUG_THREAD_POOL_IN_RAND_C 1
+
+void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len) {
+
+  struct rand_thread_state stack_state;
   struct rand_thread_state *state =
       CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_RAND);
+#ifdef DEBUG_THREAD_POOL_IN_RAND_C
+      fprintf(stdout, "[rand.c] RAND_bytes_with_additional_data() 1\n");
+      fflush(stdout);
+#endif
+
+  if (state == NULL) {
+    state = OPENSSL_malloc(sizeof(struct rand_thread_state));
+    if (state == NULL ||
+        !CRYPTO_set_thread_local(OPENSSL_THREAD_LOCAL_RAND, state,
+                                 rand_thread_state_free)) {
+      // If the system is out of memory, use an ephemeral state on the
+      // stack.
+      state = &stack_state;
+    }
+
+#if defined(BORINGSSL_FIPS)
+    // Initialize the thread-local Jitter instance.
+    state->jitter_ec = NULL;
+    // The first parameter passed to |jent_entropy_collector_alloc| function is
+    // the desired oversampling rate. Passing a 0 tells Jitter module to use
+    // the default rate (which is 3 in Jitter v3.1.0).
+    state->jitter_ec = jent_entropy_collector_alloc(0, JENT_FORCE_FIPS);
+    if (state->jitter_ec == NULL) {
+      abort();
+    }
+#endif
+  }
+
+  // Every thread has its own Jitter instance so we fetch the one assigned
+  // to the current thread.
   if (state == NULL || state->jitter_ec == NULL) {
     abort();
   }
 
+#ifdef DEBUG_THREAD_POOL_IN_RAND_C
+      fprintf(stdout, "[rand.c] calling jent_read_entropy_safe\n");
+      fflush(stdout);
+#endif
   // Generate the required number of bytes with Jitter.
   if (jent_read_entropy_safe(&state->jitter_ec, (char *) out_entropy,
                              out_entropy_len) != (ssize_t) out_entropy_len) {
     abort();
   }
+#ifdef DEBUG_THREAD_POOL_IN_RAND_C
+      fprintf(stdout, "[rand.c] finished jent_read_entropy_safe\n");
+      fflush(stdout);
+#endif
+}
+
+#define FIPS_USE_THREAD_ENTROPY_POOL 1
+static void CRYPTO_get_fips_seed(uint8_t *out_entropy, size_t out_entropy_len,
+                             int *out_want_additional_input) {
+  *out_want_additional_input = 0;
+
+#if defined(FIPS_USE_THREAD_ENTROPY_POOL)
+#ifdef DEBUG_THREAD_POOL_IN_RAND_C
+      fprintf(stdout, "[rand.c] now calling thread_entropy_pool_get_entropy\n");
+      fflush(stdout);
+#endif
+  if (thread_entropy_pool_get_entropy(out_entropy, out_entropy_len) != 1) {
+    abort();
+  }
+#ifdef DEBUG_THREAD_POOL_IN_RAND_C
+      fprintf(stdout, "[rand.c] finished calling thread_entropy_pool_get_entropy\n");
+      fflush(stdout);
+#endif
+#else
+  get_jitter_entropy(out_entropy, out_entropy_len);
+#endif
 
   if (boringssl_fips_break_test("CRNG")) {
     // This breaks the "continuous random number generator test" defined in FIPS
@@ -334,6 +394,10 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
   struct rand_thread_state stack_state;
   struct rand_thread_state *state =
       CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_RAND);
+#ifdef DEBUG_THREAD_POOL_IN_RAND_C
+      fprintf(stdout, "[rand.c] RAND_bytes_with_additional_data() 1\n");
+      fflush(stdout);
+#endif
 
   if (state == NULL) {
     state = OPENSSL_malloc(sizeof(struct rand_thread_state));

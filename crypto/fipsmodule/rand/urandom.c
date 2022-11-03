@@ -85,18 +85,6 @@
 #include "../delocate.h"
 #include "../../internal.h"
 
-#ifndef MIN
-#define AWSLC_MIN(X,Y) (((X) < (Y)) ? (X) : (Y))
-#else
-#define AWSLC_MIN(X,Y) MIN(X,Y)
-#endif
-
-// One second in nanoseconds.
-#define ONE_SECOND INT64_C(1000000000)
-// 250 milliseconds in nanoseconds.
-#define MILLISECONDS_250 INT64_C(250000000)
-#define INITIAL_BACKOFF_DELAY 1
-
 // handle_rare_urandom_error initiates exponential backoff. |backoff| holds the
 // previous backoff delay. Initial backoff delay is |INITIAL_BACKOFF_DELAY|.
 // This function will be called so rarely (if ever), that we keep it as a

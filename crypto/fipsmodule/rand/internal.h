@@ -129,10 +129,25 @@ OPENSSL_INLINE int have_fast_rdrand(void) {
 #define MAX_BACKOFF_RETRIES 9
 OPENSSL_EXPORT void HAZMAT_set_urandom_test_mode_for_testing(void);
 
-OPENSSL_EXPORT int init_entropy_pool(void);
-OPENSSL_EXPORT int start_entropy_pool_thread(void);
+#ifndef MIN
+#define AWSLC_MIN(X,Y) (((X) < (Y)) ? (X) : (Y))
+#else
+#define AWSLC_MIN(X,Y) MIN(X,Y)
+#endif
+// One second in nanoseconds.
+#define ONE_SECOND INT64_C(1000000000)
+// 250 milliseconds in nanoseconds.
+#define MILLISECONDS_250 INT64_C(250000000)
+#define INITIAL_BACKOFF_DELAY 1
 
+OPENSSL_EXPORT int thread_entropy_pool_start(void);
+OPENSSL_EXPORT int thread_entropy_pool_get_entropy(uint8_t *buffer_get,
+  size_t buffer_get_size);
 OPENSSL_EXPORT int test_it(void);
+
+#if defined(BORINGSSL_FIPS)
+  OPENSSL_EXPORT void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len);
+#endif
 
 #if defined(__cplusplus)
 }  // extern C
