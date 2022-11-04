@@ -128,7 +128,7 @@ static void rand_thread_state_clear_all(void) {
     CTR_DRBG_clear(&cur->drbg);
     OPENSSL_cleanse(cur->last_block, sizeof(cur->last_block));
 
-    jent_entropy_collector_free(cur->jitter_ec);
+    //jent_entropy_collector_free(cur->jitter_ec);
   }
   // The locks are deliberately left locked so that any threads that are still
   // running will hang if they try to call |RAND_bytes|.
@@ -162,7 +162,7 @@ static void rand_thread_state_free(void *state_in) {
   CTR_DRBG_clear(&state->drbg);
   OPENSSL_cleanse(state->last_block, sizeof(state->last_block));
 
-  jent_entropy_collector_free(state->jitter_ec);
+  //jent_entropy_collector_free(state->jitter_ec);
 #endif
 
   OPENSSL_free(state);
@@ -216,7 +216,7 @@ static int rdrand(uint8_t *buf, size_t len) {
 
 #if defined(BORINGSSL_FIPS)
 
-#define DEBUG_THREAD_POOL_IN_RAND_C 1
+//#define DEBUG_THREAD_POOL_IN_RAND_C 1
 
 void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len) {
 
@@ -249,6 +249,7 @@ void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len) {
       abort();
     }
 #endif
+
   }
 
   // Every thread has its own Jitter instance so we fetch the one assigned
@@ -273,6 +274,7 @@ void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len) {
 }
 
 #define FIPS_USE_THREAD_ENTROPY_POOL 1
+
 static void CRYPTO_get_fips_seed(uint8_t *out_entropy, size_t out_entropy_len,
                              int *out_want_additional_input) {
   *out_want_additional_input = 0;
@@ -353,10 +355,32 @@ static void rand_get_seed(struct rand_thread_state *state,
 
 #endif // BORINGSSL_FIPS
 
+#if defined(FIPS_USE_THREAD_ENTROPY_POOL)
+DEFINE_STATIC_ONCE(g_thread_entropy_pool_once)
+#endif
+
+static int use_thread_entropy_pool(void) {
+#if defined(FIPS_USE_THREAD_ENTROPY_POOL)
+  return 1;
+#else
+  return 0;
+#endif
+}
+
+static void thread_pool_once_callback(void) {
+  if (thread_entropy_pool_start() != 1) {
+    abort();
+  }
+}
+
 void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
                                      const uint8_t user_additional_data[32]) {
   if (out_len == 0) {
     return;
+  }
+
+  if (use_thread_entropy_pool() == 1) {
+    CRYPTO_once(g_thread_entropy_pool_once_bss_get(), thread_pool_once_callback);
   }
 
   const uint64_t fork_generation = CRYPTO_get_fork_generation();
@@ -409,7 +433,7 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
       state = &stack_state;
     }
 
-#if defined(BORINGSSL_FIPS)
+#if 0
     // Initialize the thread-local Jitter instance.
     state->jitter_ec = NULL;
     // The first parameter passed to |jent_entropy_collector_alloc| function is
@@ -456,6 +480,10 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
       CRYPTO_STATIC_MUTEX_unlock_write(thread_states_list_lock_bss_get());
     }
 #endif
+  }
+
+  if (use_thread_entropy_pool() == 1 && state->fork_generation != fork_generation) {
+    thread_entropy_pool_start();
   }
 
   if (state->calls >= kReseedInterval ||
