@@ -80,7 +80,8 @@ static void circular_buffer_reset(struct circular_buffer *buffer) {
 }
 
 // circular_buffer_validate_state performs various run-time validation on the
-// circular buffer |buffer|
+// circular buffer |buffer|.
+// Should call this function for every mutable operation.
 static bool circular_buffer_validate_state(struct circular_buffer *buffer) {
   circular_buffer_debug_print(buffer, NULL);
   if (buffer->count > sizeof(buffer->buffer)) {
@@ -270,30 +271,55 @@ struct entropy_pool {
 
 DEFINE_BSS_GET(struct entropy_pool, dynamic_entropy_pool)
 
-static void entropy_pool_init(void);
 
-static void entropy_pool_init(void) {
-  struct entropy_pool *entropy_pool = dynamic_entropy_pool_bss_get();
+static void entropy_pool_debug_print(struct entropy_pool *entropy_pool,
+  char *info) {
+#ifdef DEBUG_THREAD_ENTROPY_POOL
+  pid_t tid = syscall(__NR_gettid);
+  fprint(stderr, "[thread entropy pool] thread ID: %i\n", tid);
+  if (info != NULL) {
+    fprintf(stderr, "%s\n", info);
+  }
+  if (entropy_pool != NULL) {
+    // We don't actually do anything with this...
+  }
+#endif
+}
+
+static void entropy_pool_init(struct entropy_pool *entropy_pool) {
+
+  entropy_pool_debug_print(entropy_pool, (char *) "entropy_pool_init()");
+
   circular_buffer_init(&entropy_pool->buffer);
 }
 OPENSSL_STATIC_ASSERT(ENTROPY_POOL_THREAD_ADD_ENTROPY_THRESHOLD <= CIRCULAR_BUFFER_SIZE, something_is_wrong_with_entropy_add_threshold)
 
+
+// entropy_pool_reset resets the entropy pool |entropy_pool|.
 static void entropy_pool_reset(struct entropy_pool *entropy_pool) {
+
+  entropy_pool_debug_print(entropy_pool, (char *) "entropy_pool_reset()");
+
   struct CRYPTO_STATIC_MUTEX *const wlock = g_entropy_pool_lock_bss_get();
   CRYPTO_STATIC_MUTEX_lock_write(wlock);
-#ifdef DEBUG_THREAD_POOL
-  pid_t tid = syscall(__NR_gettid);
-      fprintf(stdout, "[entropy pool thread][id: %i] In entropy_pool_reset...................\n", tid);
-      fflush(stdout);
-#endif
+
+  entropy_pool_debug_print(entropy_pool, (char *) "acquired write lock");
+
   circular_buffer_reset(&entropy_pool->buffer);
   CRYPTO_STATIC_MUTEX_unlock_write(wlock);
+
+  entropy_pool_debug_print(entropy_pool, (char *) "released write lock");
 }
 
-// Thread execution might switch to a thread consuming from the entropy pool,
-// while executing this function. This 
-// But a true solution requires locking in 
-// But it will be quickly corrected.
+// entropy_pool_on_error manages error handling for entropy pool |entropy_pool|
+// when an error is encountered.
+// Should be called from top-level functions to minimise double work.
+static void entropy_pool_on_error(struct entropy_pool *entropy_pool) {
+  entropy_pool_reset(entropy_pool);
+}
+
+// entropy_pool_can_add_entropy returns true if it is possible to add entropy
+// to the entropy pool |entropy_pool|, and false otherwise.
 static bool entropy_pool_can_add_entropy(struct entropy_pool *entropy_pool) {
   if (entropy_pool->buffer.count < CIRCULAR_BUFFER_SIZE) {
     return true;
@@ -305,18 +331,22 @@ static int entropy_pool_add_entropy(struct entropy_pool *entropy_pool) {
 
   int ret = 0;
 
+  entropy_pool_debug_print(entropy_pool, (char *) "entropy_pool_add_entropy()");
+
   struct CRYPTO_STATIC_MUTEX *const wlock = g_entropy_pool_lock_bss_get();
   CRYPTO_STATIC_MUTEX_lock_write(wlock);
 
+  entropy_pool_debug_print(entropy_pool, (char *) "acquired write lock");
+
   size_t entropy_to_add_size = circular_buffer_max_can_put(&entropy_pool->buffer);
 
-  // Only add ENTROPY_POOL_ADD_ENTROPY_SIZE at a time to decrease thread
-  // contention (more entropy takes longer to generate!)
+  // Only add ENTROPY_POOL_ADD_ENTROPY_SIZE at a time to decrease the time the
+  // entropy thread pooler is running.
   if (entropy_to_add_size > ENTROPY_POOL_ADD_ENTROPY_MAX_SIZE) {
     entropy_to_add_size = ENTROPY_POOL_ADD_ENTROPY_MAX_SIZE;
   }
 
-  uint8_t static_entropy_buffer[64] = {[0 ... 63] = 0x02};
+  uint8_t static_entropy_buffer[ENTROPY_POOL_ADD_ENTROPY_MAX_SIZE] = { 0x02 };
   thread_entropy_pool_get_jitter_entropy(static_entropy_buffer, entropy_to_add_size);
 
   if (circular_buffer_put(&entropy_pool->buffer, static_entropy_buffer,
@@ -328,11 +358,12 @@ static int entropy_pool_add_entropy(struct entropy_pool *entropy_pool) {
 
 end:
   CRYPTO_STATIC_MUTEX_unlock_write(wlock);
+  entropy_pool_debug_print(entropy_pool, (char *) "released write lock");
   return ret;
 }
 
-static void entropy_pool_handle_retry(long *backoff);
-
+// entropy_pool_handle_retry sleeps the thread a number of nanoseconds that
+// depends on |backoff|
 static void entropy_pool_handle_retry(long *backoff) {
   // Exponential backoff.
   //
@@ -354,147 +385,83 @@ static void entropy_pool_handle_retry(long *backoff) {
   // Cap backoff at 99,999,999  nsec, which is the maximum value the nanoseconds
   // field in |timespec| can hold.
   *backoff = AWSLC_MIN((*backoff) * 10, ONE_SECOND - 1);
-  // |nanosleep| can mutate |sleep_time|. Hence, we use |backoff| for state.
+  // |nanosleep| can mutate |sleep_time| (only if it fails I guess(?)). Hence,
+  // we use |backoff| for state.
   sleep_time.tv_nsec = *backoff;
 
   nanosleep(&sleep_time, &sleep_time);
 }
 
-// Should fall back to a direct call to jitter entropy?
+// entropy_pool_get_entropy writtes |buffer_get_size| of entropy from
+// |entropy_pool| into |buffer_get|.
+// The size of |buffer_get| must be at least |buffer_get_size|.
 static int entropy_pool_get_entropy(struct entropy_pool *entropy_pool,
   uint8_t *buffer_get, size_t buffer_get_size) {
+
+  // For added availability instead of exponentially backing off, a direct call
+  // to jitter entropy can be performed.
+  // Or this can can happen after a certain amount of time backing off.
+  // All this complicates logic though.
+
+  entropy_pool_debug_print(entropy_pool, (char *) "entropy_pool_add_entropy()");
 
   int ret = 0;
   long backoff = INITIAL_BACKOFF_DELAY;
   struct CRYPTO_STATIC_MUTEX *const wlock = g_entropy_pool_start_lock_bss_get();
 
-  
-
-#ifdef DEBUG_THREAD_POOL
-  pid_t tid = syscall(__NR_gettid);
-      fprintf(stdout, "[entropy pool thread][id: %i] In entropy_pool_get_entropy\n", tid);
-      fflush(stdout);
-#endif
 retry:
   CRYPTO_STATIC_MUTEX_lock_write(wlock);
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] In entropy_pool_get_entropy have lock\n", tid);
-      fflush(stdout);
-#endif
+
+  entropy_pool_debug_print(entropy_pool, (char *) "acquired write lock");
+
   if (buffer_get_size < circular_buffer_max_can_get(&entropy_pool->buffer)) {
     CRYPTO_STATIC_MUTEX_unlock_write(wlock);
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] In entropy_pool_get_entropy released lock and retrying\n", tid);
-      fflush(stdout);
-#endif
+    entropy_pool_debug_print(entropy_pool, (char *) "released write lock");
     entropy_pool_handle_retry(&backoff);
     goto retry;
   }
 
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] In entropy_pool_get_entropy calling circular_buffer_get()\n", tid);
-      fflush(stdout);
-#endif
   if (circular_buffer_get(&entropy_pool->buffer, buffer_get,
     buffer_get_size) != 1) {
     goto end;
   }
 
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] In entropy_pool_get_entropy finished circular_buffer_get()\n", tid);
-      fflush(stdout);
-#endif
   ret = 1;
 
 end:
   CRYPTO_STATIC_MUTEX_unlock_write(wlock);
+  entropy_pool_debug_print(entropy_pool, (char *) "released write lock");
   return ret;
 }
 
-static void entropy_pool_on_error(struct entropy_pool *entropy_pool) {
-  entropy_pool_reset(entropy_pool);
-}
-
+// entropy_thread_pool_loop implements the main thread loop for the entropy
+// pool.
 static void * entropy_thread_pool_loop(void *p) {
 
   size_t iteration_counter = 0;
 
-#ifdef DEBUG_THREAD_POOL
-    pid_t tid = syscall(__NR_gettid);
-      fprintf(stdout, "[entropy pool thread][id: %i] In new pool thread\n", tid);
-      fflush(stdout);
-#endif
-
-  entropy_pool_init();
-
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] Initialised new entropy pool in thread\n", tid);
-      fflush(stdout);
-#endif
+  entropy_pool_init(dynamic_entropy_pool_bss_get());
 
   while (1) {
 
     // Let's start from one
     iteration_counter++;
 
-#ifdef DEBUG_THREAD_POOL
-    fprintf(stdout, "[entropy pool thread][id: %i] New iteration (%zu)\n\n", tid, iteration_counter);
-    fflush(stdout);
-
-    fprintf(stdout, "[entropy pool thread][id: %i] Gathering write lock\n", tid);
-    fflush(stdout);
-#endif
-
-#ifdef DEBUG_THREAD_POOL
-    fprintf(stdout, "[entropy pool thread][id: %i] Checking whether we should add more entropy\n", tid);
-    fflush(stdout);
-#endif
-
     if (entropy_pool_can_add_entropy(dynamic_entropy_pool_bss_get())) {
-
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] Adding more entropy to the entropy pool\n", tid);
-      fflush(stdout);
-#endif
 
       if (entropy_pool_add_entropy(dynamic_entropy_pool_bss_get()) != 1) {
 
-#ifdef DEBUG_THREAD_POOL
-        fprintf(stdout, "[entropy pool thread][id: %i] Exit - add_entropy_to_entropy_pool() failed\n", tid);
-        fflush(stdout);
-#endif
         entropy_pool_on_error(dynamic_entropy_pool_bss_get());
         goto end;     
       }
     }
 
-#ifdef DEBUG_THREAD_POOL
-    fprintf(stdout, "[entropy pool thread][id: %i] Releasing write lock\n", tid);
-    fflush(stdout);
-#endif
-
-#ifdef DEBUG_THREAD_POOL
-    fprintf(stdout, "[entropy pool thread][id: %i] Sleeping entropy pool thread\n", tid);
-    fflush(stdout);
-#endif
-
     struct timespec entropy_pool_tread_loop_sleep = {.tv_sec = 0, .tv_nsec = ENTROPY_POOL_THREAD_SLEEP };
     if (nanosleep(&entropy_pool_tread_loop_sleep, NULL) != 0) {
-
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] Exit - nanosleep() failed\n", tid);
-      fflush(stdout);
-#endif
       entropy_pool_on_error(dynamic_entropy_pool_bss_get());
       // Some signal interrupted nanosleep(). Just assume this is fatal.
       goto end;       
     }
-
-#ifdef DEBUG_THREAD_POOL
-    //if (iteration_counter >= 5) {
-    //  goto end;
-    //}
-#endif
   }
 
 end:
@@ -503,43 +470,38 @@ end:
 }
 
 
+// Internally exposed function.
+// Use these functions when interacting with this entropy pool.
 
-// "Public" functions
-
+// thread_entropy_pool_start initialises thread entropy pool
 int thread_entropy_pool_start(void) {
 
   int ret = 0;
 
+  entropy_pool_debug_print(NULL, (char *) "thread_entropy_pool_start()");
+
   struct CRYPTO_STATIC_MUTEX *const wlock = g_entropy_pool_start_lock_bss_get();
   CRYPTO_STATIC_MUTEX_lock_write(wlock);
 
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread] Starting new pool thread\n");
-      fflush(stdout);
-#endif
+  entropy_pool_debug_print(NULL, (char *) "acquired write lock");
 
   pthread_t thread_id;
   if (pthread_create(&thread_id, NULL, entropy_thread_pool_loop, NULL) != 0) {
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread] Exit - pthread_create() failed\n");
-      fflush(stdout);
-#endif
     goto end;
   }
-
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread] Started new pool thread\n");
-      fflush(stdout);
-#endif
 
   ret = 1;
 
 end:
   CRYPTO_STATIC_MUTEX_unlock_write(wlock);
+  entropy_pool_debug_print(NULL, (char *) "released write lock");
   return ret;
 }
 
-// This needs to be able to retry...
+// thread_entropy_pool_get_entropy write |buffer_get_size| bytes of entropy
+// to |buffer_get|.
+// The size of |buffer_get| must be at least |buffer_get_size|.
+// TODOOOO This needs to be able to retry...
 int thread_entropy_pool_get_entropy(uint8_t *buffer_get,
   size_t buffer_get_size) {
 
@@ -549,63 +511,25 @@ int thread_entropy_pool_get_entropy(uint8_t *buffer_get,
 
 int test_it(void) {
 
-#if 0
-  circular_buffer_reset(&static_circular_buffer);
-
-  circular_buffer_print(&static_circular_buffer);
-
-  uint8_t test_buffer_put[64] = {[0 ... 63] = 0x01};
-  if (circular_buffer_put(&static_circular_buffer, test_buffer_put, 64) != 1) {
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread] test 1 failed\n");
-      fflush(stdout);
-#endif
-    return 0;
-  }
-
-  circular_buffer_print(&static_circular_buffer);
-
-  uint8_t test_buffer_get[64] = {0};
-  if (circular_buffer_get(&static_circular_buffer, test_buffer_get, 64) != 1) {
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread] test 2 failed\n");
-      fflush(stdout);
-#endif
-    return 0;
-  }
-
-  circular_buffer_print(&static_circular_buffer);
-
-#endif
-  //entropy_thread_pool_loop(NULL);
-
   if (thread_entropy_pool_start() != 1) {
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread] test 3 failed\n");
-      fflush(stdout);
-#endif
     return 0;
   }
 
   uint8_t test_buffer_get[64] = {0};
   if (thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1) {
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread] test 4 failed\n");
-      fflush(stdout);
-#endif
     return  0;
   }
 
   if (thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1) {
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread] test 5 failed\n");
-      fflush(stdout);
-#endif
     return  0;
   }
 
   return 1;
 }
+
+
+// Entropy source
+// We give the thread that runs the entropy pool its own entropy source.
 
 #include "../../../third_party/jitterentropy/jitterentropy.h"
 
@@ -615,12 +539,8 @@ struct jitter_entropy_state {
 
 DEFINE_BSS_GET(struct jitter_entropy_state, jitter_entropy_state)
 
-static void thread_entropy_pool_get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len) {
-
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] RAND_bytes_with_additional_data() 1\n");
-      fflush(stdout);
-#endif
+static void thread_entropy_pool_get_jitter_entropy(uint8_t *out_entropy,
+  size_t out_entropy_len) {
 
   struct jitter_entropy_state *jitter_entropy_st = jitter_entropy_state_bss_get();
 
@@ -640,17 +560,9 @@ static void thread_entropy_pool_get_jitter_entropy(uint8_t *out_entropy, size_t 
     abort();
   }
 
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] calling jent_read_entropy_safe\n");
-      fflush(stdout);
-#endif
   // Generate the required number of bytes with Jitter.
-  if (jent_read_entropy_safe(&jitter_entropy_st->jitter_entropy, (char *) out_entropy,
-                             out_entropy_len) != (ssize_t) out_entropy_len) {
+  if (jent_read_entropy_safe(&jitter_entropy_st->jitter_entropy,
+    (char *) out_entropy, out_entropy_len) != (ssize_t) out_entropy_len) {
     abort();
   }
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] finished jent_read_entropy_safe\n");
-      fflush(stdout);
-#endif
 }
