@@ -8,6 +8,8 @@
 
 #include "internal.h"
 
+#include "../delocate.h"
+
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -20,13 +22,20 @@ static void thread_entropy_pool_get_jitter_entropy(uint8_t *out_entropy,
 #define CIRCULAR_BUFFER_SIZE 320
 
 // Fixed-sized circular buffer with no overwriting.
-// Implementation assumes this is a completely flat representation.
+// Implementation assumes this is a completely flat representation and
+// continuous memory.
+//
+// Yes, |capacity| is not strictly needed in the current implementation because
+// the size of the memory area is known to be CIRCULAR_BUFFFER_SIZE|. But one
+// might imagine a dynamic buffer, or a larger buffer but not all space is in
+// use. Using |capacity| can allow an easier switch to such alternative
+// implementations.
 struct circular_buffer {
-  size_t capacity;  // Max number of elements in the circular buffer
+  size_t capacity;    // Max number of elements in the circular buffer
   size_t index_read;  // Next index to read from (get)
   size_t index_write; // Next index to write to (put)
-  size_t count;     // Number of bytes written to buffer
-  uint8_t buffer[CIRCULAR_BUFFER_SIZE]; // buffer memory area
+  size_t count;       // Number of bytes written to buffer
+  uint8_t buffer[CIRCULAR_BUFFER_SIZE]; // Continuous memory area
 };
 
 // Otherwise a useless circular buffer...
@@ -70,10 +79,10 @@ static void circular_buffer_reset(struct circular_buffer *buffer) {
   buffer->capacity = CIRCULAR_BUFFER_SIZE;
 }
 
-// circular_buffer_validate performs various run-time validation on the
+// circular_buffer_validate_state performs various run-time validation on the
 // circular buffer |buffer|
-static bool circular_buffer_validate(struct circular_buffer *buffer) {
-  circular_buffer_debug_print(buffer);
+static bool circular_buffer_validate_state(struct circular_buffer *buffer) {
+  circular_buffer_debug_print(buffer, NULL);
   if (buffer->count > sizeof(buffer->buffer)) {
     return false;
   }
@@ -84,27 +93,26 @@ static bool circular_buffer_validate(struct circular_buffer *buffer) {
   return true;
 }
 
-// Given an index |index| into the circular buffer |buffer| and a number of
-// increments |increment_size|, |circular_buffer_compute_overflow| computes
-// the number of bytes the number of increments will move the index past
-// the capacity of |buffer|, if this is the case. If this is not the case, 0 is
-// returned.
-static size_t circular_buffer_compute_overflow(struct circular_buffer *buffer,
-  size_t index, size_t increment_size) {
+// circular_buffer_compute_overflow computes the index after adding
+// |index_increments| to the index |index| of the circular buffer |buffer|.
+// This can be used to compute the number of overflow bytes after a read or
+// write operation against a circular buffer.
+static size_t circular_buffer_compute_next_index(struct circular_buffer *buffer,
+  size_t index, size_t index_increment) {
 
-  // TODO: index+increment_size could potentially overflow the maximum value
+  // TODO: index+index_increment could potentially overflow the maximum value
   // of the type size_t. Should ensure this is not the case.
 
   // If no overflow at all, return 0
-  if (index + increment_size < buffer->capacity) {
+  if (index + index_increment < buffer->capacity) {
     return 0;
   }
 
-  // Okay, there is an overflow, return that size then...
-  // Do the calculation modulo buffer->capacity - 1 because we want the
-  // number of overflowing bytes. If done modulo buffer->capacity then
-  // overflowing by e.g. 1, would return 0.
-  return (index + increment_size) % (buffer->capacity - 1);
+  // Okay, there is an overflow, we need to wrap around then. Do the calculation
+  // modulo buffer->capacity because we want the index. If done modulo
+  // buffer->capacity-1 we can instead get the number of overflow bytes for a
+  // read or write operation (but we don't want that).
+  return (index + index_increment) % (buffer->capacity);
 }
 
 // circular_buffer_max_can_put returns the maximum number of bytes that can be
@@ -113,101 +121,127 @@ static size_t circular_buffer_max_can_put(struct circular_buffer *buffer) {
   return buffer->capacity - buffer->count;
 }
 
-static void circular_buffer_write_and_update(struct circular_buffer *buffer,
-  uint8_t *buffer_put, size_t buffer_put_size) {
+// circular_buffer_write_and_update writes |buffer_write_size| of bytes from
+// |buffer_write| to circular buffer |buffer|.
+// Note!!!! this function cannot handle overflows.
+static int circular_buffer_write(struct circular_buffer *buffer,
+  uint8_t *buffer_write, size_t buffer_write_size) {
 
-  memcpy(buffer->buffer + buffer->index_write, buffer_put, buffer_put_size);
+  // Make sure not to overflow buffer. This means that this function cannot
+  // handle overflows. -1 because we first write to
+  // buffer->buffer[buffer->index_write]
+  if ((buffer->index_write + buffer_write_size - 1) >= buffer->capacity) {
+    return 0;
+  }
+  memcpy(buffer->buffer + buffer->index_write, buffer_write, buffer_write_size);
 
-  // TODO: buffer->index_write + buffer_put_size could potentially overflow the
+  // TODO: buffer->index_write + buffer_write_size could potentially overflow the
   // maximum value of the type size_t. Should ensure this is not the case.
 
-  buffer->index_write = (buffer->index_write + buffer_put_size) % (buffer->capacity);
-  buffer->count = buffer->count + buffer_put_size;
+  buffer->count = buffer->count + buffer_write_size;
+
+  return 1;
 }
 
+// circular_buffer_put writes |buffer_put_size| bytes from |buffer_put| into the
+// circular buffer |buffer|.
+// This function handles overflow.
 static int circular_buffer_put(struct circular_buffer *buffer,
   uint8_t *buffer_put, size_t buffer_put_size) {
+
+  circular_buffer_debug_print(buffer, (char *) "circular_buffer_put()");
 
   if (buffer_put_size > circular_buffer_max_can_put(buffer)) {
     // Can't satisfy put operation
     return 0;
   }
 
-  size_t size_after_overflow = circular_buffer_compute_overflow(buffer,
+  size_t final_index = circular_buffer_compute_next_index(buffer,
     buffer->index_write, buffer_put_size);
-  size_t size_up_to_overflow = buffer_put_size - size_after_overflow;
 
-  assert(buffer_put_size = (size_after_overflow + size_up_to_overflow));
+  if (final_index < buffer->index_write) {
 
-  circular_buffer_write_and_update(buffer, buffer_put, size_up_to_overflow);
-  if (size_after_overflow > 0) {
-    circular_buffer_write_and_update(buffer,
-      buffer_put + size_up_to_overflow, size_after_overflow);
+    size_t bytes_up_to_buffer_size = buffer->capacity - buffer->index_write;
+
+    if (buffer_put_size != (bytes_up_to_buffer_size + final_index)) {
+      // Uhh ohh, this is weird
+      return 0;
+    }
+    // First write bytes up to the buffer size. We write to
+    // buffer->buffer[index_write], so no need to subtract by 1.
+    circular_buffer_write(buffer, buffer_put, bytes_up_to_buffer_size);
+
+    buffer->index_write = 0;
+    circular_buffer_write(buffer, buffer_put + bytes_up_to_buffer_size, final_index);
+    buffer->index_write = final_index;
+  } else {
+
+    circular_buffer_write(buffer, buffer_put, buffer_put_size);
+    buffer->index_write = final_index; 
   }
 
-  if (!circular_buffer_validate(buffer)) {
+  if (!circular_buffer_validate_state(buffer)) {
     return 0;
   }
 
   return 1;
 }
 
-static bool circular_buffer_can_get(struct circular_buffer *buffer,
-  size_t want_to_get_count) {
-#ifdef DEBUG_THREAD_POOL
-  pid_t tid = syscall(__NR_gettid);
-      fprintf(stdout, "[entropy pool thread][id: %i] In circular_buffer_can_get, want_to_get_count = %zu and buffer->count = %zu\n", tid, want_to_get_count, buffer->count);
-      fflush(stdout);
-  circular_buffer_print(buffer);
-#endif
-
-  if (want_to_get_count <= buffer->count) {
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] In circular_buffer_can_get nope, enough entropy in pool\n", tid);
-      fflush(stdout);
-#endif
-    return true;
-  }
-#ifdef DEBUG_THREAD_POOL
-      fprintf(stdout, "[entropy pool thread][id: %i] In circular_buffer_can_get nope, not enough entropy in pool\n", tid);
-      fflush(stdout);
-#endif
-  return false;
+// circular_buffer_max_can_get returns the maximum number of bytes that can be
+// read from the circular buffer |buffer|
+static bool circular_buffer_max_can_get(struct circular_buffer *buffer) {
+  return buffer->count;
 }
 
-static void circular_buffer_get_and_update(struct circular_buffer *buffer,
-  uint8_t *buffer_get, size_t buffer_get_size) {
+// circular_buffer_read reads |buffer_read_size| of bytes from
+// |buffer_read| from circular buffer |buffer|.
+// Note!!!! this function cannot handle overflows.
+static void circular_buffer_read(struct circular_buffer *buffer,
+  uint8_t *buffer_read, size_t buffer_read_size) {
 
-  memcpy(buffer_get, buffer->buffer + buffer->index_read, buffer_get_size);
-  //memset(buffer->buffer + buffer->index_read, 0, buffer_get_size);
+  memcpy(buffer_read, buffer->buffer + buffer->index_read, buffer_read_size);
+  memset(buffer->buffer + buffer->index_read, 0, buffer_read_size);
 
-  // Need to statically ensure that buffer->index_write + buffer_get_size doesn't overflow...
-  buffer->index_read = (buffer->index_read + buffer_get_size) % (buffer->capacity);
-  buffer->count = buffer->count - buffer_get_size;
+  buffer->count = buffer->count - buffer_read_size;
 }
 
-// |buffer_get| must be at least |buffer_get_size| in size
+
+// NOTE!!!! |buffer_get| must be at least |buffer_get_size| in size
 static int circular_buffer_get(struct circular_buffer *buffer,
   uint8_t *buffer_get, size_t buffer_get_size) {
 
-  if (!circular_buffer_can_get(buffer, buffer_get_size)) {
+  circular_buffer_debug_print(buffer, (char *) "circular_buffer_get()");
+
+  if (buffer_get_size > circular_buffer_max_can_get(buffer)) {
     // Can't satisfy get operation
     return 0;
   }
 
-  size_t overflow_size = circular_buffer_compute_overflow(buffer,
+  size_t final_index = circular_buffer_compute_next_index(buffer,
     buffer->index_read, buffer_get_size);
-  size_t size_up_to_overflow = buffer_get_size - overflow_size;
 
-  assert(buffer_get_size = (overflow_size + size_up_to_overflow));
+  if (final_index < buffer->index_read) {
 
-  circular_buffer_get_and_update(buffer, buffer_get, size_up_to_overflow);
-  if (overflow_size > 0) {
-    circular_buffer_get_and_update(buffer,
-      buffer_get + size_up_to_overflow, overflow_size);
+    size_t bytes_up_to_buffer_size = buffer->capacity - buffer->index_read;
+
+    if (buffer_get_size != (bytes_up_to_buffer_size + final_index)) {
+      // Uhh ohh, this is weird
+      return 0;
+    }
+    // First write bytes up to the buffer size. We write to
+    // buffer->buffer[index_read], so no need to subtract by 1.
+    circular_buffer_read(buffer, buffer_get, bytes_up_to_buffer_size);
+
+    buffer->index_read = 0;
+    circular_buffer_read(buffer, buffer_get + bytes_up_to_buffer_size, final_index);
+    buffer->index_read = final_index;
+  } else {
+
+    circular_buffer_read(buffer, buffer_get, buffer_get_size);
+    buffer->index_read = final_index; 
   }
 
-  if (!circular_buffer_validate(buffer)) {
+  if (!circular_buffer_validate_state(buffer)) {
     return 0;
   }
 
@@ -345,7 +379,7 @@ retry:
       fprintf(stdout, "[entropy pool thread][id: %i] In entropy_pool_get_entropy have lock\n", tid);
       fflush(stdout);
 #endif
-  if (!circular_buffer_can_get(&entropy_pool->buffer, buffer_get_size)) {
+  if (buffer_get_size < circular_buffer_max_can_get(&entropy_pool->buffer)) {
     CRYPTO_STATIC_MUTEX_unlock_write(wlock);
 #ifdef DEBUG_THREAD_POOL
       fprintf(stdout, "[entropy pool thread][id: %i] In entropy_pool_get_entropy released lock and retrying\n", tid);
@@ -379,9 +413,7 @@ static void entropy_pool_on_error(struct entropy_pool *entropy_pool) {
   entropy_pool_reset(entropy_pool);
 }
 
-void * entropy_thread_pool_loop(void *p);
-
-void * entropy_thread_pool_loop(void *p) {
+static void * entropy_thread_pool_loop(void *p) {
 
   size_t iteration_counter = 0;
 

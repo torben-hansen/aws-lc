@@ -216,17 +216,11 @@ static int rdrand(uint8_t *buf, size_t len) {
 
 #if defined(BORINGSSL_FIPS)
 
-//#define DEBUG_THREAD_POOL_IN_RAND_C 1
-
 void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len) {
 
   struct rand_thread_state stack_state;
   struct rand_thread_state *state =
       CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_RAND);
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] RAND_bytes_with_additional_data() 1\n");
-      fflush(stdout);
-#endif
 
   if (state == NULL) {
     state = OPENSSL_malloc(sizeof(struct rand_thread_state));
@@ -258,19 +252,11 @@ void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len) {
     abort();
   }
 
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] calling jent_read_entropy_safe\n");
-      fflush(stdout);
-#endif
   // Generate the required number of bytes with Jitter.
   if (jent_read_entropy_safe(&state->jitter_ec, (char *) out_entropy,
                              out_entropy_len) != (ssize_t) out_entropy_len) {
     abort();
   }
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] finished jent_read_entropy_safe\n");
-      fflush(stdout);
-#endif
 }
 
 #define FIPS_USE_THREAD_ENTROPY_POOL 1
@@ -280,17 +266,9 @@ static void CRYPTO_get_fips_seed(uint8_t *out_entropy, size_t out_entropy_len,
   *out_want_additional_input = 0;
 
 #if defined(FIPS_USE_THREAD_ENTROPY_POOL)
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] now calling thread_entropy_pool_get_entropy\n");
-      fflush(stdout);
-#endif
   if (thread_entropy_pool_get_entropy(out_entropy, out_entropy_len) != 1) {
     abort();
   }
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] finished calling thread_entropy_pool_get_entropy\n");
-      fflush(stdout);
-#endif
 #else
   get_jitter_entropy(out_entropy, out_entropy_len);
 #endif
@@ -355,9 +333,7 @@ static void rand_get_seed(struct rand_thread_state *state,
 
 #endif // BORINGSSL_FIPS
 
-#if defined(FIPS_USE_THREAD_ENTROPY_POOL)
 DEFINE_STATIC_ONCE(g_thread_entropy_pool_once)
-#endif
 
 static int use_thread_entropy_pool(void) {
 #if defined(FIPS_USE_THREAD_ENTROPY_POOL)
@@ -418,10 +394,6 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
   struct rand_thread_state stack_state;
   struct rand_thread_state *state =
       CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_RAND);
-#ifdef DEBUG_THREAD_POOL_IN_RAND_C
-      fprintf(stdout, "[rand.c] RAND_bytes_with_additional_data() 1\n");
-      fflush(stdout);
-#endif
 
   if (state == NULL) {
     state = OPENSSL_malloc(sizeof(struct rand_thread_state));
