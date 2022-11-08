@@ -684,6 +684,7 @@ if(BUILD_TESTING)
     fipsmodule/pbkdf/pbkdf_test.cc
     fipsmodule/rand/ctrdrbg_test.cc
     fipsmodule/rand/cpu_jitter_test.cc
+    fipsmodule/rand/entropy_pool_thread_test.cc
     fipsmodule/rand/fork_detect_test.cc
     fipsmodule/service_indicator/service_indicator_test.cc
     fipsmodule/sha/sha_test.cc

@@ -21,16 +21,6 @@
 #include "../../test/file_test.h"
 #include "../../test/test_util.h"
 
-TEST(RandPoolTests, ThreadPoolBasic) {
-
-  ASSERT_TRUE(thread_entropy_pool_start() != 1);
-
-  uint8_t test_buffer_get[64] = {0};
-  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1);
-  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1);
-  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1);
-}
-
 TEST(CTRDRBGTest, Basic) {
 
   const uint8_t kSeed[CTR_DRBG_ENTROPY_LEN] = {
