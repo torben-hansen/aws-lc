@@ -205,8 +205,10 @@ static void circular_buffer_read(struct circular_buffer *buffer,
   buffer->count = buffer->count - buffer_read_size;
 }
 
-
-// NOTE!!!! |buffer_get| must be at least |buffer_get_size| in size
+// circular_buffer_get reads |buffer_get_size| bytes from circular buffer
+// |buffer| to |buffer_put|.
+// This function handles overflow.
+// NOTE!!!! |buffer_get| must be at least |buffer_get_size| in size.
 static int circular_buffer_get(struct circular_buffer *buffer,
   uint8_t *buffer_get, size_t buffer_get_size) {
 
