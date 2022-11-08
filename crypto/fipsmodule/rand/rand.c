@@ -119,6 +119,42 @@ __declspec(allocate(".CRT$XCU")) void(*fips_library_destructor)(void) =
 static void rand_thread_state_clear_all(void) __attribute__ ((destructor));
 #endif
 
+static int we_are_in_fips_mode(void) {
+#if defined(AWSLC_FIPS)
+  return true;
+#else
+  return false;
+#endif
+}
+
+static int use_thread_entropy_pool(void) {
+
+  if (!we_are_in_fips_mode()) {
+    return false;
+  }
+
+#if defined(FIPS_USE_THREAD_ENTROPY_POOL)
+  return true;
+#else
+  return false;
+#endif
+}
+
+static int use_jitter_entropy(void) {
+
+  if (!we_are_in_fips_mode()) {
+    return false;
+  }
+
+  // This is the default FIPS entropy source. Hence, if none of the other ones
+  // have been build/chosen, use this one...
+  // This way we will always choose at least one source!
+  if (use_thread_entropy_pool()) {
+    return false;
+  }
+
+  return true;
+}
 
 static void rand_thread_state_clear_all(void) {
   CRYPTO_STATIC_MUTEX_lock_write(thread_states_list_lock_bss_get());
@@ -128,7 +164,9 @@ static void rand_thread_state_clear_all(void) {
     CTR_DRBG_clear(&cur->drbg);
     OPENSSL_cleanse(cur->last_block, sizeof(cur->last_block));
 
-    //jent_entropy_collector_free(cur->jitter_ec);
+    if (use_jitter_entropy()) {
+      jent_entropy_collector_free(cur->jitter_ec);
+    }
   }
   // The locks are deliberately left locked so that any threads that are still
   // running will hang if they try to call |RAND_bytes|.
@@ -162,7 +200,9 @@ static void rand_thread_state_free(void *state_in) {
   CTR_DRBG_clear(&state->drbg);
   OPENSSL_cleanse(state->last_block, sizeof(state->last_block));
 
-  //jent_entropy_collector_free(state->jitter_ec);
+  if (use_jitter_entropy()) {
+    jent_entropy_collector_free(state->jitter_ec);
+  }
 #endif
 
   OPENSSL_free(state);
@@ -335,14 +375,6 @@ static void rand_get_seed(struct rand_thread_state *state,
 
 DEFINE_STATIC_ONCE(g_thread_entropy_pool_once)
 
-static int use_thread_entropy_pool(void) {
-#if defined(FIPS_USE_THREAD_ENTROPY_POOL)
-  return 1;
-#else
-  return 0;
-#endif
-}
-
 static void thread_pool_once_callback(void) {
   if (thread_entropy_pool_start() != 1) {
     abort();
@@ -355,7 +387,12 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
     return;
   }
 
-  if (use_thread_entropy_pool() == 1) {
+  // For a fork event we actually need to start a new thread entropy pool.
+  // Otherwise they will have duplicate state. CRYPTO_once() is not per process
+  // unfortunately. So, below doesn't work if we fork...
+  // We fix this further down though by starting a new thread entropy pool
+  // "manually" when checking for forks.
+  if (use_thread_entropy_pool()) {
     CRYPTO_once(g_thread_entropy_pool_once_bss_get(), thread_pool_once_callback);
   }
 
@@ -405,17 +442,17 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
       state = &stack_state;
     }
 
-#if 0
-    // Initialize the thread-local Jitter instance.
-    state->jitter_ec = NULL;
-    // The first parameter passed to |jent_entropy_collector_alloc| function is
-    // the desired oversampling rate. Passing a 0 tells Jitter module to use
-    // the default rate (which is 3 in Jitter v3.1.0).
-    state->jitter_ec = jent_entropy_collector_alloc(0, JENT_FORCE_FIPS);
-    if (state->jitter_ec == NULL) {
-      abort();
+    if (use_jitter_entropy()) {
+      // Initialize the thread-local Jitter instance.
+      state->jitter_ec = NULL;
+      // The first parameter passed to |jent_entropy_collector_alloc| function is
+      // the desired oversampling rate. Passing a 0 tells Jitter module to use
+      // the default rate (which is 3 in Jitter v3.1.0).
+      state->jitter_ec = jent_entropy_collector_alloc(0, JENT_FORCE_FIPS);
+      if (state->jitter_ec == NULL) {
+        abort();
+      }
     }
-#endif
 
     state->last_block_valid = 0;
     uint8_t seed[CTR_DRBG_ENTROPY_LEN];
@@ -454,7 +491,7 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
 #endif
   }
 
-  if (use_thread_entropy_pool() == 1 && state->fork_generation != fork_generation) {
+  if (use_thread_entropy_pool() && state->fork_generation != fork_generation) {
     thread_entropy_pool_start();
   }
 
