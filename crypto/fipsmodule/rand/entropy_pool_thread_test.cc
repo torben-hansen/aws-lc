@@ -9,10 +9,10 @@
 
 TEST(RandPoolTests, ThreadPoolBasic) {
 
-  ASSERT_TRUE(thread_entropy_pool_start() != 1);
+  ASSERT_TRUE(thread_entropy_pool_start() == 1);
 
   uint8_t test_buffer_get[64] = {0};
-  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1);
-  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1);
-  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1);
+  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) == 1);
+  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) == 1);
+  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) == 1);
 }

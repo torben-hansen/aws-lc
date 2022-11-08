@@ -41,11 +41,13 @@ struct circular_buffer {
 // Otherwise a useless circular buffer...
 OPENSSL_STATIC_ASSERT(CIRCULAR_BUFFER_SIZE > 0, CIRCULAR_BUFFER_SIZE_must_be_strictly_larger_than_0);
 
+#define DEBUG_THREAD_ENTROPY_POOL 1
+
 static void circular_buffer_debug_print(struct circular_buffer *buffer,
   char *info) {
 #ifdef DEBUG_THREAD_ENTROPY_POOL
   pid_t tid = syscall(__NR_gettid);
-  fprint(stderr, "[thread entropy pool] thread ID: %i\n", tid);
+  fprintf(stderr, "[thread entropy pool] thread ID: %i\n", tid);
   if (info != NULL) {
     fprintf(stderr, "%s\n", info);
   }
@@ -64,6 +66,7 @@ static void circular_buffer_debug_print(struct circular_buffer *buffer,
 
 // circular_buffer_init initialises the circular buffer |buffer|
 static void circular_buffer_init(struct circular_buffer *buffer) {
+  circular_buffer_debug_print(buffer, (char *) "circular_buffer_init()");
   buffer->capacity = CIRCULAR_BUFFER_SIZE;
   buffer->index_read = 0;
   buffer->index_write = 0;
@@ -104,12 +107,7 @@ static size_t circular_buffer_compute_next_index(struct circular_buffer *buffer,
   // TODO: index+index_increment could potentially overflow the maximum value
   // of the type size_t. Should ensure this is not the case.
 
-  // If no overflow at all, return 0
-  if (index + index_increment < buffer->capacity) {
-    return 0;
-  }
-
-  // Okay, there is an overflow, we need to wrap around then. Do the calculation
+  // Do the calculation
   // modulo buffer->capacity because we want the index. If done modulo
   // buffer->capacity-1 we can instead get the number of overflow bytes for a
   // read or write operation (but we don't want that).
@@ -160,6 +158,9 @@ static int circular_buffer_put(struct circular_buffer *buffer,
   size_t final_index = circular_buffer_compute_next_index(buffer,
     buffer->index_write, buffer_put_size);
 
+  fprintf(stderr, "buffer_put_size = %zu\n", buffer_put_size);
+  fprintf(stderr, "final_index = %zu\n", final_index);
+
   if (final_index < buffer->index_write) {
 
     size_t bytes_up_to_buffer_size = buffer->capacity - buffer->index_write;
@@ -190,7 +191,7 @@ static int circular_buffer_put(struct circular_buffer *buffer,
 
 // circular_buffer_max_can_get returns the maximum number of bytes that can be
 // read from the circular buffer |buffer|
-static bool circular_buffer_max_can_get(struct circular_buffer *buffer) {
+static size_t circular_buffer_max_can_get(struct circular_buffer *buffer) {
   return buffer->count;
 }
 
@@ -276,12 +277,12 @@ static void entropy_pool_debug_print(struct entropy_pool *entropy_pool,
   char *info) {
 #ifdef DEBUG_THREAD_ENTROPY_POOL
   pid_t tid = syscall(__NR_gettid);
-  fprint(stderr, "[thread entropy pool] thread ID: %i\n", tid);
+  fprintf(stderr, "[thread entropy pool] thread ID: %i\n", tid);
   if (info != NULL) {
     fprintf(stderr, "%s\n", info);
   }
   if (entropy_pool != NULL) {
-    // We don't actually do anything with this...
+    circular_buffer_debug_print(&entropy_pool->buffer, NULL);
   }
 #endif
 }
@@ -403,7 +404,7 @@ static int entropy_pool_get_entropy(struct entropy_pool *entropy_pool,
   // Or this can can happen after a certain amount of time backing off.
   // All this complicates logic though.
 
-  entropy_pool_debug_print(entropy_pool, (char *) "entropy_pool_add_entropy()");
+  entropy_pool_debug_print(entropy_pool, (char *) "entropy_pool_get_entropy()");
 
   int ret = 0;
   long backoff = INITIAL_BACKOFF_DELAY;
@@ -413,10 +414,11 @@ retry:
   CRYPTO_STATIC_MUTEX_lock_write(wlock);
 
   entropy_pool_debug_print(entropy_pool, (char *) "acquired write lock");
-
-  if (buffer_get_size < circular_buffer_max_can_get(&entropy_pool->buffer)) {
+  fprintf(stderr, "buffer_get_size = %zu\n", buffer_get_size);
+  fprintf(stderr, "circular_buffer_max_can_get(&entropy_pool->buffer) = %zu\n", circular_buffer_max_can_get(&entropy_pool->buffer));
+  if (buffer_get_size > circular_buffer_max_can_get(&entropy_pool->buffer)) {
     CRYPTO_STATIC_MUTEX_unlock_write(wlock);
-    entropy_pool_debug_print(entropy_pool, (char *) "released write lock");
+    entropy_pool_debug_print(entropy_pool, (char *) "released write lock - retrying");
     entropy_pool_handle_retry(&backoff);
     goto retry;
   }
@@ -489,7 +491,6 @@ int thread_entropy_pool_start(void) {
   if (pthread_create(&thread_id, NULL, entropy_thread_pool_loop, NULL) != 0) {
     goto end;
   }
-
   ret = 1;
 
 end:
