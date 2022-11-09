@@ -25,6 +25,9 @@
 #define DEFINE_BSS_GET(type, name)        \
   static type name __attribute__((used)); \
   type *name##_bss_get(void) __attribute__((const));
+#define DEFINE_THREAD_LOCAL_BSS_GET(type, name)        \
+  static __thread type name __attribute__((used)); \
+  type *name##_bss_get(void) __attribute__((const));
 // For FIPS builds we require that CRYPTO_ONCE_INIT be zero.
 #define DEFINE_STATIC_ONCE(name) DEFINE_BSS_GET(CRYPTO_once_t, name)
 // For FIPS builds we require that CRYPTO_STATIC_MUTEX_INIT be zero.
@@ -36,6 +39,9 @@
 #else
 #define DEFINE_BSS_GET(type, name) \
   static type name;                \
+  static type *name##_bss_get(void) { return &name; }
+#define DEFINE_THREAD_LOCAL_BSS_GET(type, name) \
+  static __thread type name;                \
   static type *name##_bss_get(void) { return &name; }
 #define DEFINE_STATIC_ONCE(name)                \
   static CRYPTO_once_t name = CRYPTO_ONCE_INIT; \

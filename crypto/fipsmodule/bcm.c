@@ -123,6 +123,7 @@
 #include "pbkdf/pbkdf.c"
 #include "rand/ctrdrbg.c"
 #include "rand/entropy_pool_thread.c"
+#include "rand/entropy_pool_daemon.c"
 #include "rand/fork_detect.c"
 #include "rand/rand.c"
 #include "rand/urandom.c"

@@ -143,7 +143,9 @@ OPENSSL_EXPORT void HAZMAT_set_urandom_test_mode_for_testing(void);
 OPENSSL_EXPORT int thread_entropy_pool_start(void);
 OPENSSL_EXPORT int thread_entropy_pool_get_entropy(uint8_t *buffer_get,
   size_t buffer_get_size);
-OPENSSL_EXPORT int test_it(void);
+OPENSSL_EXPORT int daemon_entropy_pool_get_entropy(uint8_t *buffer_get,
+  size_t buffer_get_size);
+OPENSSL_EXPORT int daemon_entropy_pool_clean_thread(void);
 
 #if defined(BORINGSSL_FIPS)
   OPENSSL_EXPORT void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len);

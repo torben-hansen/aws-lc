@@ -512,25 +512,6 @@ int thread_entropy_pool_get_entropy(uint8_t *buffer_get,
 }
 
 
-int test_it(void) {
-
-  if (thread_entropy_pool_start() != 1) {
-    return 0;
-  }
-
-  uint8_t test_buffer_get[64] = {0};
-  if (thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1) {
-    return  0;
-  }
-
-  if (thread_entropy_pool_get_entropy(test_buffer_get, 64) != 1) {
-    return  0;
-  }
-
-  return 1;
-}
-
-
 // Entropy source
 // We give the thread that runs the entropy pool its own entropy source.
 
