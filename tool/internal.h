@@ -155,6 +155,8 @@ extern const uint8_t kDERRSAPrivate2048[];
 extern const size_t kDERRSAPrivate2048Len;
 extern const uint8_t kDERRSAPrivate4096[];
 extern const size_t kDERRSAPrivate4096Len;
+extern const uint8_t kDERRSAPrivate8094[];
+extern const size_t kDERRSAPrivate8094Len;
 
 #define BM_ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 
