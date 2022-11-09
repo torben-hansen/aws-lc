@@ -41,7 +41,7 @@ struct circular_buffer {
 // Otherwise a useless circular buffer...
 OPENSSL_STATIC_ASSERT(CIRCULAR_BUFFER_SIZE > 0, CIRCULAR_BUFFER_SIZE_must_be_strictly_larger_than_0);
 
-#define DEBUG_THREAD_ENTROPY_POOL 1
+//#define DEBUG_THREAD_ENTROPY_POOL 1
 
 static void circular_buffer_debug_print(struct circular_buffer *buffer,
   char *info) {
@@ -158,9 +158,6 @@ static int circular_buffer_put(struct circular_buffer *buffer,
   size_t final_index = circular_buffer_compute_next_index(buffer,
     buffer->index_write, buffer_put_size);
 
-  fprintf(stderr, "buffer_put_size = %zu\n", buffer_put_size);
-  fprintf(stderr, "final_index = %zu\n", final_index);
-
   if (final_index < buffer->index_write) {
 
     size_t bytes_up_to_buffer_size = buffer->capacity - buffer->index_write;
@@ -258,7 +255,7 @@ static int circular_buffer_get(struct circular_buffer *buffer,
 // Entropy injection latency constants
 #define MILLISECONDS_100 INT64_C(100000000)
 #define MILLISECONDS_900 INT64_C(900000000)
-#define ENTROPY_POOL_THREAD_SLEEP MILLISECONDS_100
+#define ENTROPY_POOL_THREAD_SLEEP MILLISECONDS_900
 
 #define ENTROPY_POOL_THREAD_ADD_ENTROPY_THRESHOLD 128
 #define ENTROPY_POOL_ADD_ENTROPY_MAX_SIZE 64
@@ -407,6 +404,7 @@ static int entropy_pool_get_entropy(struct entropy_pool *entropy_pool,
   entropy_pool_debug_print(entropy_pool, (char *) "entropy_pool_get_entropy()");
 
   int ret = 0;
+  size_t retry_counter = 0;
   long backoff = INITIAL_BACKOFF_DELAY;
   struct CRYPTO_STATIC_MUTEX *const wlock = g_entropy_pool_start_lock_bss_get();
 
@@ -414,11 +412,15 @@ retry:
   CRYPTO_STATIC_MUTEX_lock_write(wlock);
 
   entropy_pool_debug_print(entropy_pool, (char *) "acquired write lock");
-  fprintf(stderr, "buffer_get_size = %zu\n", buffer_get_size);
-  fprintf(stderr, "circular_buffer_max_can_get(&entropy_pool->buffer) = %zu\n", circular_buffer_max_can_get(&entropy_pool->buffer));
+
   if (buffer_get_size > circular_buffer_max_can_get(&entropy_pool->buffer)) {
     CRYPTO_STATIC_MUTEX_unlock_write(wlock);
     entropy_pool_debug_print(entropy_pool, (char *) "released write lock - retrying");
+    retry_counter = retry_counter + 1;
+#ifdef DEBUG_THREAD_ENTROPY_POOL
+    fprintf(stderr, "Retry counter: %zu\n", retry_counter);
+    fflush(stderr);
+#endif
     entropy_pool_handle_retry(&backoff);
     goto retry;
   }

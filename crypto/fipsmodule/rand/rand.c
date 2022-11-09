@@ -119,6 +119,8 @@ __declspec(allocate(".CRT$XCU")) void(*fips_library_destructor)(void) =
 static void rand_thread_state_clear_all(void) __attribute__ ((destructor));
 #endif
 
+#define FIPS_USE_THREAD_ENTROPY_POOL 1
+
 static int we_are_in_fips_mode(void) {
 #if defined(AWSLC_FIPS)
   return true;
@@ -299,19 +301,17 @@ void get_jitter_entropy(uint8_t *out_entropy, size_t out_entropy_len) {
   }
 }
 
-#define FIPS_USE_THREAD_ENTROPY_POOL 1
-
 static void CRYPTO_get_fips_seed(uint8_t *out_entropy, size_t out_entropy_len,
                              int *out_want_additional_input) {
   *out_want_additional_input = 0;
 
-#if defined(FIPS_USE_THREAD_ENTROPY_POOL)
-  if (thread_entropy_pool_get_entropy(out_entropy, out_entropy_len) != 1) {
-    abort();
+  if (use_thread_entropy_pool()) {
+    if (thread_entropy_pool_get_entropy(out_entropy, out_entropy_len) != 1) {
+      abort();
+    }    
+  } else {
+    get_jitter_entropy(out_entropy, out_entropy_len);   
   }
-#else
-  get_jitter_entropy(out_entropy, out_entropy_len);
-#endif
 
   if (boringssl_fips_break_test("CRNG")) {
     // This breaks the "continuous random number generator test" defined in FIPS
