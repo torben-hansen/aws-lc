@@ -7,12 +7,15 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "entropy_pool_daemon.h"
 
 #define JED_DAEMON_FAIL(error_string) fprintf(stderr, "[JED daemon] Failed: %s\n", error_string); exit(EXIT_FAILURE);
 
-static const uint8_t entropy_pool[JED_ENTROPY_POOL_SIZE] = {
+// Initial entropy
+// In a real implementation this would be some entropy pool implementation
+static uint8_t entropy_pool[JED_ENTROPY_POOL_SIZE] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
     0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,
@@ -45,6 +48,12 @@ int main() {
 
     int client_iterator = 0;
 
+    int urandomfd = open("/dev/urandom", O_RDONLY);
+    if (urandomfd < 0) {
+        fprintf(stdout, "[JED daemon] failed to open /dev/urandom\n");
+        return EXIT_FAILURE;
+    }
+
     while(1) {
         fprintf(stdout, "\n"); // Better distinguish new connection
 
@@ -62,6 +71,13 @@ int main() {
         fprintf(stdout, "[JED daemon] Successfully sent entropy to client (id: %i)\n", client_sock);
         client_iterator++;
         fprintf(stdout, "[JED daemon] Disconnected connection (id: %i)\n", client_sock);
+
+        // "Randomise" to allow FIPS tests to pass (namely the CRNGT tests...)
+        ssize_t result = read(urandomfd, entropy_pool, JED_ENTROPY_WRITE_ALWAYS);
+        if (result < 0) {
+            fprintf(stdout, "[JED daemon] Reading from /dev/urandom failed\n");
+            return EXIT_FAILURE;
+        }
 
         int true_value = 1;
         setsockopt(client_sock, SOL_SOCKET, SO_REUSEADDR, &true_value, sizeof(int));
