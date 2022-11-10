@@ -59,21 +59,21 @@ install(DIRECTORY include/openssl
 
 if(USE_THREAD_ENTROPY_POOL)
   message(STATUS "Using thread entropy pool for FIPS-validated entropy")
-  set(FIPS_USE_THREAD_ENTROPY_POOL 1)
+  add_definitions(-DFIPS_USE_THREAD_ENTROPY_POOL)
 
   if(ENABLE_DEBUG_THREAD_ENTROPY_POOL)
     message(STATUS "Enable debug information for thread entropy pool")
-    set(DEBUG_THREAD_ENTROPY_POOL 1)
+    add_definitions(-DDEBUG_THREAD_ENTROPY_POOL)
   endif()
 endif()
 
 if(USE_DAEMON_ENTROPY_POOL)
   message(STATUS "Using daemon entropy pool for FIPS-validated entropy")
-  set(FIPS_USE_DAEMON_ENTROPY_POOL 1)
+  add_definitions(-DFIPS_USE_DAEMON_ENTROPY_POOL)
 
   if(ENABLE_DEBUG_DAEMON_ENTROPY_POOL)
     message(STATUS "Enable debug information for daemon entropy pool")
-    set(DEBUG_DAEMON_ENTROPY_POOL 1)
+    add_definitions(-DDEBUG_DAEMON_ENTROPY_POOL)
   endif()
 endif()
 
