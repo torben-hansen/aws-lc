@@ -140,6 +140,8 @@ OPENSSL_EXPORT void HAZMAT_set_urandom_test_mode_for_testing(void);
 #define MILLISECONDS_250 INT64_C(250000000)
 #define INITIAL_BACKOFF_DELAY 1
 
+OPENSSL_EXPORT int use_thread_entropy_pool(void);
+OPENSSL_EXPORT int use_daemon_entropy_pool(void);
 OPENSSL_EXPORT int thread_entropy_pool_start(void);
 OPENSSL_EXPORT int thread_entropy_pool_get_entropy(uint8_t *buffer_get,
   size_t buffer_get_size);

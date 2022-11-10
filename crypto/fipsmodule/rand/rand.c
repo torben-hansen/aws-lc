@@ -119,7 +119,12 @@ __declspec(allocate(".CRT$XCU")) void(*fips_library_destructor)(void) =
 static void rand_thread_state_clear_all(void) __attribute__ ((destructor));
 #endif
 
-#define FIPS_USE_THREAD_ENTROPY_POOL 1
+//#define FIPS_USE_THREAD_ENTROPY_POOL 1
+#define FIPS_USE_DAEMON_ENTROPY_POOL 1
+
+#if defined(FIPS_USE_THREAD_ENTROPY_POOL) && defined(FIPS_USE_DAEMON_ENTROPY_POOL)
+#error "Can only select one type of entropy pool"
+#endif
 
 static int we_are_in_fips_mode(void) {
 #if defined(AWSLC_FIPS)
@@ -129,13 +134,26 @@ static int we_are_in_fips_mode(void) {
 #endif
 }
 
-static int use_thread_entropy_pool(void) {
+int use_thread_entropy_pool(void) {
 
   if (!we_are_in_fips_mode()) {
     return false;
   }
 
 #if defined(FIPS_USE_THREAD_ENTROPY_POOL)
+  return true;
+#else
+  return false;
+#endif
+}
+
+int use_daemon_entropy_pool(void) {
+
+  if (!we_are_in_fips_mode()) {
+    return false;
+  }
+
+#if defined(FIPS_USE_DAEMON_ENTROPY_POOL)
   return true;
 #else
   return false;
@@ -151,7 +169,7 @@ static int use_jitter_entropy(void) {
   // This is the default FIPS entropy source. Hence, if none of the other ones
   // have been build/chosen, use this one...
   // This way we will always choose at least one source!
-  if (use_thread_entropy_pool()) {
+  if (use_thread_entropy_pool() || use_daemon_entropy_pool()) {
     return false;
   }
 
@@ -308,7 +326,11 @@ static void CRYPTO_get_fips_seed(uint8_t *out_entropy, size_t out_entropy_len,
   if (use_thread_entropy_pool()) {
     if (thread_entropy_pool_get_entropy(out_entropy, out_entropy_len) != 1) {
       abort();
-    }    
+    }
+  } else if (use_daemon_entropy_pool()) {
+    if (daemon_entropy_pool_get_entropy(out_entropy, out_entropy_len) != 1) {
+      abort();
+    }
   } else {
     get_jitter_entropy(out_entropy, out_entropy_len);   
   }
