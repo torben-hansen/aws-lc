@@ -514,6 +514,8 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
   }
 
   if (use_thread_entropy_pool() && state->fork_generation != fork_generation) {
+    // state->fork_generation != fork_generation is true in the forked child
+    // process
     thread_entropy_pool_start();
   }
 
