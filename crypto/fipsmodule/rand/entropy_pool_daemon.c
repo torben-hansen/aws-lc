@@ -20,6 +20,8 @@ struct jitter_entropy_daemon_client {
 
 // Will be allocated in .bss and hence initalised to 0. Therefore,
 // |daemon_connection_is_open| should be false by default.
+// TODO check that TLS data is actually stored in .bss...
+// (post compilation validation for FIPS build seems to work)
 DEFINE_THREAD_LOCAL_BSS_GET(struct jitter_entropy_daemon_client, dynamic_jitter_entropy_daemon_client)
 
 
