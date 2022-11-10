@@ -22,7 +22,6 @@ struct jitter_entropy_daemon_client {
 // |daemon_connection_is_open| should be false by default.
 DEFINE_THREAD_LOCAL_BSS_GET(struct jitter_entropy_daemon_client, dynamic_jitter_entropy_daemon_client)
 
-//#define DEBUG_DAEMON_ENTROPY_POOL 1
 
 static void jitter_entropy_daemon_client_debug_print(
   struct jitter_entropy_daemon_client *client, const char *info) {

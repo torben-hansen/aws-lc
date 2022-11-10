@@ -17,7 +17,7 @@
 
 #include "entropy_pool_daemon.h"
 
-  #define JED_DAEMON_FAIL(func, error_string) fprintf(stderr, "[JED daemon] Failed (%s): %s\n", func, error_string); exit(EXIT_FAILURE);
+#define JED_DAEMON_FAIL(func, error_string) fprintf(stderr, "[JED daemon] Failed (%s): %s\n", func, error_string); exit(EXIT_FAILURE);
 
 // Initial entropy.
 // In a real implementation this would be some entropy pool implementation.
@@ -50,7 +50,6 @@ int main() {
       JED_DAEMON_FAIL("unlink", strerror(errno))
     }
   }
-
 
   int domain_sock = socket(AF_UNIX, SOCK_STREAM, 0);
   if (domain_sock < 0) {

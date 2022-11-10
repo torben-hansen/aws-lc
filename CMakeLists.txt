@@ -20,6 +20,10 @@ option(BUILD_TESTING "Build all test targets for AWS-LC" ON)
 option(BUILD_LIBSSL "Build libssl for AWS-LC" ON)
 option(DISABLE_PERL "Disable Perl for AWS-LC" OFF)
 option(DISABLE_GO "Disable Go for AWS-LC" OFF)
+option(USE_THREAD_ENTROPY_POOL "Use thread entropy pool for FIPS-validated entropy" OFF)
+option(ENABLE_DEBUG_THREAD_ENTROPY_POOL "Enable debug information for thread entropy pool" OFF)
+option(USE_DAEMON_ENTROPY_POOL "Use daemon entropy pool for FIPS-validated entropy" OFF)
+option(ENABLE_DEBUG_DAEMON_ENTROPY_POOL "Enable debug information for daemon entropy pool" OFF)
 
 enable_language(C)
 
@@ -52,6 +56,26 @@ install(DIRECTORY include/openssl
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         COMPONENT Development
 )
+
+if(USE_THREAD_ENTROPY_POOL)
+  message(STATUS "Using thread entropy pool for FIPS-validated entropy")
+  set(FIPS_USE_THREAD_ENTROPY_POOL 1)
+
+  if(ENABLE_DEBUG_THREAD_ENTROPY_POOL)
+    message(STATUS "Enable debug information for thread entropy pool")
+    set(DEBUG_THREAD_ENTROPY_POOL 1)
+  endif()
+endif()
+
+if(USE_DAEMON_ENTROPY_POOL)
+  message(STATUS "Using daemon entropy pool for FIPS-validated entropy")
+  set(FIPS_USE_DAEMON_ENTROPY_POOL 1)
+
+  if(ENABLE_DEBUG_DAEMON_ENTROPY_POOL)
+    message(STATUS "Enable debug information for daemon entropy pool")
+    set(DEBUG_DAEMON_ENTROPY_POOL 1)
+  endif()
+endif()
 
 if(ANDROID)
   # Android-NDK CMake files reconfigure the path and so Go and Perl won't be

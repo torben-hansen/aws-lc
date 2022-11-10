@@ -119,10 +119,11 @@ __declspec(allocate(".CRT$XCU")) void(*fips_library_destructor)(void) =
 static void rand_thread_state_clear_all(void) __attribute__ ((destructor));
 #endif
 
-//#define FIPS_USE_THREAD_ENTROPY_POOL 1
-#define FIPS_USE_DAEMON_ENTROPY_POOL 1
-
 #if defined(FIPS_USE_THREAD_ENTROPY_POOL) && defined(FIPS_USE_DAEMON_ENTROPY_POOL)
+#error "Can only select one type of entropy pool"
+#endif
+
+#if defined(DEBUG_THREAD_ENTROPY_POOL) && defined(DEBUG_DAEMON_ENTROPY_POOL)
 #error "Can only select one type of entropy pool"
 #endif
 
@@ -166,9 +167,9 @@ static int use_jitter_entropy(void) {
     return false;
   }
 
-  // This is the default FIPS entropy source. Hence, if none of the other ones
-  // have been build/chosen, use this one...
-  // This way we will always choose at least one source!
+  // Jitter is the default FIPS entropy source. Hence, if none of the other ones
+  // have been build/chosen, use it... This way we will always choose at least
+  // one source!
   if (use_thread_entropy_pool() || use_daemon_entropy_pool()) {
     return false;
   }

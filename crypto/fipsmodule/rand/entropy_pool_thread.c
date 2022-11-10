@@ -41,7 +41,6 @@ struct circular_buffer {
 // Otherwise a useless circular buffer...
 OPENSSL_STATIC_ASSERT(CIRCULAR_BUFFER_SIZE > 0, CIRCULAR_BUFFER_SIZE_must_be_strictly_larger_than_0);
 
-//#define DEBUG_THREAD_ENTROPY_POOL 1
 
 static void circular_buffer_debug_print(struct circular_buffer *buffer,
   char *info) {
