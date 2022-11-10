@@ -3,16 +3,25 @@
 
 #include <gtest/gtest.h>
 
+#include <openssl/rand.h>
+
 #include "internal.h"
 #include "../../test/file_test.h"
 #include "../../test/test_util.h"
 
 TEST(RandPoolTests, ThreadPoolBasic) {
 
+  if (!use_thread_entropy_pool()) {
+    return;
+  }
+
   ASSERT_TRUE(thread_entropy_pool_start() == 1);
 
-  uint8_t test_buffer_get[64] = {0};
+  uint8_t test_buffer_get[256] = {0};
   ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) == 1);
-  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) == 1);
-  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 64) == 1);
+  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 128) == 1);
+  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 32) == 1);
+  ASSERT_TRUE(thread_entropy_pool_get_entropy(test_buffer_get, 256) == 1);
+
+  ASSERT_TRUE(RAND_bytes(test_buffer_get, 64));
 }
