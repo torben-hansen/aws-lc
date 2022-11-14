@@ -252,9 +252,10 @@ static int circular_buffer_get(struct circular_buffer *buffer,
 // Entropy pool
 
 // Entropy injection latency constants
+#define MILLISECONDS_50 INT64_C(50000000)
 #define MILLISECONDS_100 INT64_C(100000000)
 #define MILLISECONDS_900 INT64_C(900000000)
-#define ENTROPY_POOL_THREAD_SLEEP MILLISECONDS_900
+#define ENTROPY_POOL_THREAD_SLEEP MILLISECONDS_50
 
 #define ENTROPY_POOL_THREAD_ADD_ENTROPY_THRESHOLD 128
 #define ENTROPY_POOL_ADD_ENTROPY_MAX_SIZE 64
@@ -324,6 +325,8 @@ static bool entropy_pool_can_add_entropy(struct entropy_pool *entropy_pool) {
   return false;
 }
 
+// TODO could optimise this function by just always generating ENTROPY_POOL_ADD_ENTROPY_MAX_SIZE
+// but without taking the lock...
 static int entropy_pool_add_entropy(struct entropy_pool *entropy_pool) {
 
   int ret = 0;
