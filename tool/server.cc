@@ -96,6 +96,10 @@ static const argument_t kArguments[] = {
         "Enable the JDK 11 workaround",
     },
     {
+        "-trust-store", kOptionalArgument,
+        "PEM-encoded file containing CA certificates.",
+    },
+    {
         "", kOptionalArgument, "",
     },
 };
@@ -272,6 +276,14 @@ bool Server(const std::vector<std::string> &args) {
     }
   }
 
+  if (args_map.count("-trust-store") != 0) {
+    const std::string &trust_store_certs = args_map["-trust-store"];
+    if (!SSL_CTX_load_verify_locations(ctx.get(), trust_store_certs.c_str(), NULL)) {
+      fprintf(stderr, "Failed to load trust store certs: %s\n", trust_store_certs.c_str());
+      return false;
+    }
+  }
+
   if (args_map.count("-ech-key") + args_map.count("-ech-config") == 1) {
     fprintf(stderr,
             "-ech-config and -ech-key must be specified together.\n");
@@ -366,9 +378,9 @@ bool Server(const std::vector<std::string> &args) {
   if (args_map.count("-require-any-client-cert") != 0) {
     SSL_CTX_set_verify(
         ctx.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
-    SSL_CTX_set_cert_verify_callback(
-        ctx.get(), [](X509_STORE_CTX *store, void *arg) -> int { return 1; },
-        nullptr);
+    //SSL_CTX_set_cert_verify_callback(
+    //    ctx.get(), [](X509_STORE_CTX *store, void *arg) -> int { return 1; },
+    //    nullptr);
   }
 
   Listener listener;
