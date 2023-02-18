@@ -43,6 +43,8 @@
 #include "../../third_party/fiat/curve25519_32.h"
 #endif  // BORINGSSL_CURVE25519_64BIT
 
+#include "../../third_party/s2n-bignum/include/s2n-bignum_aws-lc.h"
+
 
 // Low-level intrinsic operations
 
@@ -1995,7 +1997,6 @@ void ED25519_keypair_from_seed(uint8_t out_public_key[32],
   OPENSSL_memcpy(out_private_key + ED25519_SEED_LEN, out_public_key, 32);
 }
 
-
 static void x25519_scalar_mult_generic(uint8_t out[32],
                                        const uint8_t scalar[32],
                                        const uint8_t point[32]) {
@@ -2087,7 +2088,20 @@ static void x25519_scalar_mult(uint8_t out[32], const uint8_t scalar[32],
   }
 #endif
 
+#if CURVE25519_IMPL_EXISTING
   x25519_scalar_mult_generic(out, scalar, point);
+#else
+  uint8_t s[32];
+  OPENSSL_memcpy(s, scalar, 32);
+  s[0] &= 248;
+  s[31] &= 127;
+  s[31] |= 64;
+  #if defined(S2N_BIGNUM_USE_ALT)
+    curve25519_x25519_alt(out, s, point);
+  #else
+    curve25519_x25519(out, s, point);
+  #endif
+#endif
 }
 
 void X25519_keypair(uint8_t out_public_value[32], uint8_t out_private_key[32]) {
@@ -2137,6 +2151,7 @@ void X25519_public_from_private(uint8_t out_public_value[32],
   e[31] &= 127;
   e[31] |= 64;
 
+#if CURVE25519_IMPL_EXISTING
   ge_p3 A;
   x25519_ge_scalarmult_base(&A, e);
 
@@ -2149,4 +2164,16 @@ void X25519_public_from_private(uint8_t out_public_value[32],
   fe_loose_invert(&zminusy_inv, &zminusy);
   fe_mul_tlt(&zminusy_inv, &zplusy, &zminusy_inv);
   fe_tobytes(out_public_value, &zminusy_inv);
+#else
+  #if defined(S2N_BIGNUM_USE_ALT)
+    curve25519_x25519base_alt(out_public_value, e);
+  #else
+    curve25519_x25519base(out_public_value, e);
+  #endif
+#endif
+}
+
+OPENSSL_EXPORT void unused_functions_silence_warning(void);
+OPENSSL_EXPORT void unused_functions_silence_warning(void) {
+  x25519_scalar_mult_generic(NULL, NULL, NULL);
 }
