@@ -116,3 +116,11 @@ extern void bignum_fromlebytes_p521(uint64_t z[static 9], const uint8_t x[static
 
 // Convert 9-digit 528-bit bignum to little-endian bytes
 extern void bignum_tolebytes_p521(uint8_t z[static 66], const uint64_t x[static 9]);
+
+extern void curve25519_x25519base(uint8_t res[static 32], const uint8_t scalar[static 32]);
+
+extern void curve25519_x25519(uint8_t res[static 32], const uint8_t scalar[static 32], const uint8_t point[static 32]);
+
+extern void curve25519_x25519base_alt(uint8_t res[static 32], const uint8_t scalar[static 32]);
+
+extern void curve25519_x25519_alt(uint8_t res[static 32], const uint8_t scalar[static 32], const uint8_t point[static 32]);
