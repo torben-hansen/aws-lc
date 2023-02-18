@@ -154,10 +154,13 @@ endif()
 # and on x86_64 and aarch64 systems only.
 if((ARCH STREQUAL "x86_64" OR ARCH STREQUAL "aarch64") AND
     UNIX AND NOT MY_ASSEMBLER_IS_TOO_OLD_FOR_AVX)
-
   # Set the source directory for s2n-bignum assembly files
   if(ARCH STREQUAL "x86_64")
-    set(S2N_BIGNUM_DIR ${PROJECT_SOURCE_DIR}/third_party/s2n-bignum/x86_att)
+    if(S2N_BIGNUM_USE_ATT)
+      set(S2N_BIGNUM_DIR ${PROJECT_SOURCE_DIR}/third_party/s2n-bignum/x86_att)
+    else()
+      set(S2N_BIGNUM_DIR ${PROJECT_SOURCE_DIR}/third_party/s2n-bignum/x86)
+    endif()
   else()
     set(S2N_BIGNUM_DIR ${PROJECT_SOURCE_DIR}/third_party/s2n-bignum/arm)
   endif()
@@ -198,6 +201,15 @@ if((ARCH STREQUAL "x86_64" OR ARCH STREQUAL "aarch64") AND
     list(APPEND S2N_BIGNUM_ASM_SOURCES
                 p384/bignum_tomont_p384_alt.S
                 p384/bignum_deamont_p384_alt.S)
+  endif()
+  if(S2N_BIGNUM_USE_ALT)
+    list(APPEND S2N_BIGNUM_ASM_SOURCES
+      curve25519/curve25519_x25519_alt.S
+      curve25519/curve25519_x25519base_alt.S)
+  else()
+    list(APPEND S2N_BIGNUM_ASM_SOURCES
+      curve25519/curve25519_x25519.S
+      curve25519/curve25519_x25519base.S)
   endif()
 endif()
 

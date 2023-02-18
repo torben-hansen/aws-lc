@@ -20,6 +20,26 @@ option(BUILD_TESTING "Build all test targets for AWS-LC" ON)
 option(BUILD_LIBSSL "Build libssl for AWS-LC" ON)
 option(DISABLE_PERL "Disable Perl for AWS-LC" OFF)
 option(DISABLE_GO "Disable Go for AWS-LC" OFF)
+option(CURVE25519_IMPL_EXISTING "Backend for curve25519" ON)
+option(S2N_BIGNUM_ALT "Backend for curve25519" OFF)
+option(S2N_BIGNUM_ATT "Backend for curve25519" OFF)
+
+if(S2N_BIGNUM_ALT)
+  set(S2N_BIGNUM_USE_ALT 1)
+  add_definitions(-DS2N_BIGNUM_USE_ALT)
+endif()
+
+if(S2N_BIGNUM_ATT)
+  set(S2N_BIGNUM_USE_ATT 1)
+endif()
+
+if(CURVE25519_IMPL_EXISTING AND (S2N_BIGNUM_ALT OR S2N_BIGNUM_ATT))
+  error("Can't use existing curve225519 impl with s2n-bignum")
+endif()
+
+if(CURVE25519_IMPL_EXISTING)
+  add_definitions(-DCURVE25519_IMPL_EXISTING)
+endif()
 
 enable_language(C)
 
