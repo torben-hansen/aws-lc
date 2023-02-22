@@ -33,6 +33,8 @@
 // affected.
 HIDDEN uint32_t OPENSSL_ia32cap_P[4] = {0};
 
+//uint32_t *openssl_ia32cap_p_get(void);
+
 #elif defined(OPENSSL_PPC64LE)
 
 HIDDEN unsigned long OPENSSL_ppc64le_hwcap2 = 0;

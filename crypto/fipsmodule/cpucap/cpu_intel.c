@@ -56,6 +56,7 @@
 
 #include <openssl/base.h>
 #include "internal.h"
+#include "../delocate.h"
 
 #if !defined(OPENSSL_NO_ASM) && (defined(OPENSSL_X86) || defined(OPENSSL_X86_64))
 
@@ -74,6 +75,12 @@ OPENSSL_MSVC_PRAGMA(warning(push, 3))
 #include <intrin.h>
 OPENSSL_MSVC_PRAGMA(warning(pop))
 #endif
+
+DEFINE_BSS_GET_ARRAY(uint32_t, openssl_ia32cap_p_get, 4)
+
+DEFINE_ARRAY_DATA(CPUCAP_4, openssl_ia32cap_p_test) {
+  memset(out, 0, sizeof(CPUCAP_4));
+}
 
 // OPENSSL_cpuid runs the cpuid instruction. |leaf| is passed in as EAX and ECX
 // is set to zero. It writes EAX, EBX, ECX, and EDX to |*out_eax| through
@@ -158,7 +165,7 @@ static void handle_cpu_env(uint32_t *out, const char *in) {
   }
 }
 
-extern uint32_t OPENSSL_ia32cap_P[4];
+//extern uint32_t OPENSSL_ia32cap_P[4];
 extern uint8_t OPENSSL_cpucap_initialized;
 
 void OPENSSL_cpuid_setup(void) {
@@ -266,10 +273,10 @@ void OPENSSL_cpuid_setup(void) {
     extended_features[0] &= ~(1u << 19);
   }
 
-  OPENSSL_ia32cap_P[0] = edx;
-  OPENSSL_ia32cap_P[1] = ecx;
-  OPENSSL_ia32cap_P[2] = extended_features[0];
-  OPENSSL_ia32cap_P[3] = extended_features[1];
+  openssl_ia32cap_p_get_bss_get()[0] = edx;
+  openssl_ia32cap_p_get_bss_get()[1] = ecx;
+  openssl_ia32cap_p_get_bss_get()[2] = extended_features[0];
+  openssl_ia32cap_p_get_bss_get()[3] = extended_features[1];
 
   OPENSSL_cpucap_initialized = 1;
 
@@ -293,10 +300,10 @@ void OPENSSL_cpuid_setup(void) {
   // The first value determines OPENSSL_ia32cap_P[0] and [1]. The second [2]
   // and [3].
 
-  handle_cpu_env(&OPENSSL_ia32cap_P[0], env1);
+  handle_cpu_env(&(openssl_ia32cap_p_get_bss_get()[0]), env1);
   env2 = strchr(env1, ':');
   if (env2 != NULL) {
-    handle_cpu_env(&OPENSSL_ia32cap_P[2], env2 + 1);
+    handle_cpu_env(&(openssl_ia32cap_p_get_bss_get()[2]), env2 + 1);
   }
 }
 

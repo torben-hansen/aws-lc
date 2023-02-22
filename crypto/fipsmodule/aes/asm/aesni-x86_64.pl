@@ -188,6 +188,8 @@
 #	incurred by operations on %xmm8-15. As ECB is not considered
 #	critical, nothing was done to mitigate the problem.
 
+
+
 $PREFIX="aes_hw";	# if $PREFIX is set to "AES", the script
 			# generates drop-in replacement for
 			# crypto/aes/asm/aes-x86_64.pl:-)
@@ -214,6 +216,7 @@ $movkey = $PREFIX eq "aes_hw" ? "movups" : "movups";
 		("%rdi","%rsi","%rdx","%rcx");	# Unix order
 
 $code=".text\n";
+#$code.=".Lopenssl_ia32cap_p_get\n";
 $code.=".extern	OPENSSL_ia32cap_P\n";
 
 $rounds="%eax";	# input to and changed by aesni_[en|de]cryptN !!!
@@ -4366,8 +4369,8 @@ __aesni_set_encrypt_key:
 
 	movups	($inp),%xmm0		# pull first 128 bits of *userKey
 	xorps	%xmm4,%xmm4		# low dword of xmm4 is assumed 0
-	leaq	OPENSSL_ia32cap_P(%rip),%r10
-	movl	4(%r10),%r10d
+	call openssl_ia32cap_p_get_bss_get
+	movl	4(%eax),%r10d
 	and	\$`1<<28|1<<11`,%r10d	# AVX and XOP bits
 	lea	16($key),%rax		# %rax is used as modifiable copy of $key
 	cmp	\$256,$bits

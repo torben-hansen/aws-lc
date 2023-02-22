@@ -61,6 +61,36 @@
   }                                                                           \
   static void name##_do_init(type *out)
 
+#define DEFINE_BSS_GET_ARRAY(type, name, size) \
+  static type name##_storage[size] = { 0 };                \
+  type *name##_bss_get(void) { return name##_storage; }
+
+#define DEFINE_ARRAY_DATA(type, name)                         \
+  DEFINE_BSS_GET(type, name##_storage)                                        \
+  DEFINE_STATIC_ONCE(name##_once)                                             \
+  static void name##_do_init(type *out);                                      \
+  static void name##_init(void) { name##_do_init(name##_storage_bss_get()); } \
+  type *name(void) {                                     \
+    CRYPTO_once(name##_once_bss_get(), name##_init);                          \
+    /* See http://c-faq.com/ansi/constmismatch.html for why the following     \
+     * cast is needed. */                                                     \
+    return (type *)name##_storage_bss_get();                            \
+  }                                                                           \
+  static void name##_do_init(type *out)
+
+#define DEFINE_DATA(type, name, accessor_decorations)                         \
+  DEFINE_BSS_GET(type, name##_storage)                                        \
+  DEFINE_STATIC_ONCE(name##_once)                                             \
+  static void name##_do_init(type *out);                                      \
+  static void name##_init(void) { name##_do_init(name##_storage_bss_get()); } \
+  accessor_decorations type *name(void) {                                     \
+    CRYPTO_once(name##_once_bss_get(), name##_init);                          \
+    /* See http://c-faq.com/ansi/constmismatch.html for why the following     \
+     * cast is needed. */                                                     \
+    return (const type *)name##_storage_bss_get();                            \
+  }                                                                           \
+  static void name##_do_init(type *out)
+
 // DEFINE_METHOD_FUNCTION defines a function named |name| which returns a
 // method table of type const |type|*. In FIPS mode, to avoid rel.ro data, it
 // is split into a CRYPTO_once_t-guarded initializer in the module and
