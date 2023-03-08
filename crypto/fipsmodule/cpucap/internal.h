@@ -40,82 +40,75 @@ typedef struct cpucap_4 {
   uint32_t cpucap[4];
 } CPUCAP_4;
 
-uint32_t *openssl_ia32cap_p_get_bss_get(void);
 CPUCAP_4 *openssl_ia32cap_p_test(void);
-
-
 
 extern uint32_t OPENSSL_ia32cap_P[4];
 
 // See Intel manual, volume 2A, table 3-11.
 
 OPENSSL_INLINE int CRYPTO_is_FXSR_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[0] & (1 << 24)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[0] & (1 << 24)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_intel_cpu(void) {
   // The reserved bit 30 is used to indicate an Intel CPU.
-  return (openssl_ia32cap_p_get_bss_get()[0] & (1 << 30)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[0] & (1 << 30)) != 0;
 }
 
 // See Intel manual, volume 2A, table 3-10.
 
 OPENSSL_INLINE int CRYPTO_is_PCLMUL_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[1] & (1 << 1)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[1] & (1 << 1)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_SSSE3_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[1] & (1 << 9)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[1] & (1 << 9)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_SSE4_1_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[1] & (1 << 19)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[1] & (1 << 19)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_MOVBE_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[1] & (1 << 22)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[1] & (1 << 22)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_AESNI_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[1] & (1 << 25)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[1] & (1 << 25)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_AVX_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[1] & (1 << 28)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[1] & (1 << 28)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_RDRAND_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[1] & (1u << 30)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[1] & (1u << 30)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_AMD_XOP_support(void) {
-  return (openssl_ia32cap_p_get_bss_get()[1] & (1 << 11)) != 0;
-}
-
-OPENSSL_INLINE int CRYPTO_is_AMD_XOP_and_AVX_support(void) {
-  return CRYPTO_is_AMD_XOP_support() && CRYPTO_is_AVX_capable();
+  return (openssl_ia32cap_p_test()->cpucap[1] & (1 << 11)) != 0;
 }
 
 // See Intel manual, volume 2A, table 3-8.
 
 OPENSSL_INLINE int CRYPTO_is_BMI1_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[2] & (1 << 3)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[2] & (1 << 3)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_AVX2_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[2] & (1 << 5)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[2] & (1 << 5)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_BMI2_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[2] & (1 << 8)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[2] & (1 << 8)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_ADX_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[2] & (1 << 19)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[2] & (1 << 19)) != 0;
 }
 
 OPENSSL_INLINE int CRYPTO_is_SHAEXT_capable(void) {
-  return (openssl_ia32cap_p_get_bss_get()[2] & (1 << 29)) != 0;
+  return (openssl_ia32cap_p_test()->cpucap[2] & (1 << 29)) != 0;
 }
 
 #endif  // OPENSSL_X86 || OPENSSL_X86_64

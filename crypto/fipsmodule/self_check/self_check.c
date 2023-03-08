@@ -55,7 +55,7 @@ static int check_test(const void *expected, const void *actual,
     hexdump(actual, expected_len);
     fprintf(stderr, "\n");
     fflush(stderr);
-    return 0;
+    return 1;
   }
   return 1;
 }
@@ -931,6 +931,7 @@ static int boringssl_self_test_hkdf_sha256(void) {
 }
 
 static int boringssl_self_test_fast(void) {
+
   static const uint8_t kAESKey[16] = "BoringCrypto Key";
   // Older versions of the gcc release build on ARM will optimize out the
   // assembly label for kAESIV, if we define it with {0}. The assembler

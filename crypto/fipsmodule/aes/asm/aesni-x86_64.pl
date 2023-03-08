@@ -217,7 +217,7 @@ $movkey = $PREFIX eq "aes_hw" ? "movups" : "movups";
 
 $code=".text\n";
 #$code.=".Lopenssl_ia32cap_p_get\n";
-$code.=".extern	OPENSSL_ia32cap_P\n";
+#$code.=".extern	OPENSSL_ia32cap_P\n";
 
 $rounds="%eax";	# input to and changed by aesni_[en|de]cryptN !!!
 # this is natural Unix argument order for public $PREFIX_[ecb|cbc]_encrypt ...
@@ -1306,7 +1306,9 @@ $code.=<<___;
 	 mov	%r10d,0x60+12(%rsp)
 	bswap	%r9d
 	leaq	OPENSSL_ia32cap_P(%rip),%r10
-	 mov	4(%r10),%r10d
+	mov	4(%r10),%r10d
+	#call openssl_ia32cap_p_test
+	#mov 4(%rax),%r10d
 	xor	$key0,%r9d
 	 and	\$`1<<26|1<<22`,%r10d		# isolate XSAVE+MOVBE
 	mov	%r9d,0x70+12(%rsp)
@@ -3853,7 +3855,9 @@ $code.=<<___;
 	movdqu	0x50($inp),$inout5
 	movdqa	$inout4,$in4
 	leaq	OPENSSL_ia32cap_P(%rip),%r9
-	mov	4(%r9),%r9d
+	mov	4(%r9),%r9d	
+	#call openssl_ia32cap_p_test
+	#mov 4(%rax),%r9d
 	cmp	\$0x70,$len
 	jbe	.Lcbc_dec_six_or_seven
 
@@ -4369,8 +4373,10 @@ __aesni_set_encrypt_key:
 
 	movups	($inp),%xmm0		# pull first 128 bits of *userKey
 	xorps	%xmm4,%xmm4		# low dword of xmm4 is assumed 0
-	call openssl_ia32cap_p_get_bss_get
-	movl	4(%eax),%r10d
+	leaq OPENSSL_ia32cap_P(%rip),%r10
+	movl 4(%r10),%r10d
+	#call openssl_ia32cap_p_test
+	#movl	4(%rax),%r10d
 	and	\$`1<<28|1<<11`,%r10d	# AVX and XOP bits
 	lea	16($key),%rax		# %rax is used as modifiable copy of $key
 	cmp	\$256,$bits

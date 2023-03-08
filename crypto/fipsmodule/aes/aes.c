@@ -79,17 +79,36 @@ void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   }
 }
 
+#include <stdio.h>
+#include <inttypes.h>
+
 int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   if (bits != 128 && bits != 192 && bits != 256) {
     return -2;
   }
+
+#if defined(CPUCAP_PRINT)
+  printf("In AES_set_encrypt_key()\n");
+  printf("openssl_ia32cap_p_test()->cpucap[0] = %" PRIu32 "\n", openssl_ia32cap_p_test()->cpucap[0]);
+  printf("openssl_ia32cap_p_test()->cpucap[1] = %" PRIu32 "\n", openssl_ia32cap_p_test()->cpucap[1]);
+  printf("openssl_ia32cap_p_test()->cpucap[2] = %" PRIu32 "\n", openssl_ia32cap_p_test()->cpucap[2]);
+  printf("openssl_ia32cap_p_test()->cpucap[3] = %" PRIu32 "\n", openssl_ia32cap_p_test()->cpucap[3]);
+#endif
+
+  int res = 0;
   if (hwaes_capable()) {
-    return aes_hw_set_encrypt_key(key, bits, aeskey);
+    res = aes_hw_set_encrypt_key(key, bits, aeskey);
   } else if (vpaes_capable()) {
     return vpaes_set_encrypt_key(key, bits, aeskey);
   } else {
     return aes_nohw_set_encrypt_key(key, bits, aeskey);
   }
+
+#if defined(CPUCAP_PRINT)
+  printf("res = %i\n", res);
+#endif
+
+  return res;
 }
 
 int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
