@@ -1820,6 +1820,73 @@ static bool SpeedTrustToken(std::string name, const TRUST_TOKEN_METHOD *method,
 #endif
 #endif
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+void CRYPTO_sysrand_for_seed(uint8_t *buf, size_t len);
+int CRYPTO_rdrand_multiple8_buf(uint8_t *buf, size_t len);
+#if defined(__cplusplus)
+}  // extern C
+#endif
+
+static bool SpeedUrandom(size_t chunk_size) {
+  std::unique_ptr<uint8_t[]> input(new uint8_t[chunk_size]);
+  TimeResults results;
+
+  if (!TimeFunction(&results, [&input, chunk_size]() -> bool {
+        CRYPTO_sysrand_for_seed(input.get(), chunk_size);
+        return true;
+      })){
+
+    return false;
+  }
+  results.PrintWithBytes("urandom", chunk_size);
+
+  return true;
+}
+
+static bool SpeedUrandom(std::string selected) {
+  if (!selected.empty() && selected.find("Urandom") == std::string::npos) {
+    return true;
+  }
+  for (size_t chunk_size : g_chunk_lengths) {
+    if (!SpeedUrandom(chunk_size)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool SpeedRdrand(size_t chunk_size) {
+  std::unique_ptr<uint8_t[]> input(new uint8_t[chunk_size]);
+  TimeResults results;
+
+  if (!TimeFunction(&results, [&input, chunk_size]() -> bool {
+        if (CRYPTO_rdrand_multiple8_buf(input.get(), chunk_size) != 1) {
+          return false;
+        }
+        return true;
+      })){
+
+    return false;
+  }
+  results.PrintWithBytes("rdrand", chunk_size);
+
+  return true;
+}
+
+static bool SpeedRdrand(std::string selected) {
+  if (!selected.empty() && selected.find("rdrand") == std::string::npos) {
+    return true;
+  }
+  for (size_t chunk_size : g_chunk_lengths) {
+    if (!SpeedRdrand(chunk_size)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 #if defined(BORINGSSL_FIPS)
 static bool SpeedSelfTest(const std::string &selected) {
   if (!selected.empty() && selected.find("self-test") == std::string::npos) {
@@ -2161,7 +2228,9 @@ bool Speed(const std::vector<std::string> &args) {
   }
 #if defined(BORINGSSL_FIPS)
   if (!SpeedSelfTest(selected) ||
-      !SpeedJitter(selected)) {
+      !SpeedJitter(selected) ||
+      !SpeedUrandom(selected) ||
+      !SpeedRdrand(selected)) {
     return false;
   }
 #endif
