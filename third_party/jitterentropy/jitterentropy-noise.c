@@ -23,6 +23,8 @@
 #include "jitterentropy-timer.h"
 #include "jitterentropy-sha3.h"
 
+#include "openssl/digest.h"
+
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 
 /***************************************************************************
@@ -91,7 +93,7 @@ static uint64_t jent_loop_shuffle(unsigned int bits, unsigned int min)
 static void jent_hash_time(struct rand_data *ec, uint64_t time,
 			   uint64_t loop_cnt, unsigned int stuck)
 {
-	HASH_CTX_ON_STACK(ctx);
+	//HASH_CTX_ON_STACK(ctx);
 	uint8_t intermediary[SHA3_256_SIZE_DIGEST];
 	uint64_t j = 0;
 #define MAX_HASH_LOOP 3
@@ -105,7 +107,10 @@ static void jent_hash_time(struct rand_data *ec, uint64_t time,
 	/* Use the memset to shut up valgrind */
 	memset(intermediary, 0, sizeof(intermediary));
 
-	sha3_256_init(&ctx);
+	EVP_MD_CTX ctx_evp;
+	EVP_MD_CTX_init(&ctx_evp);
+	EVP_DigestInit_ex(&ctx_evp, EVP_sha3_256(), NULL);
+	//sha3_256_init(&ctx);
 
 	/*
 	 * testing purposes -- allow test app to set the counter, not
@@ -127,6 +132,7 @@ static void jent_hash_time(struct rand_data *ec, uint64_t time,
 	 * interested in one Keccack1600 compression operation performed with
 	 * the sha3_final.
 	 */
+#if 0
 	for (j = 0; j < hash_loop_cnt; j++) {
 		sha3_update(&ctx, intermediary, sizeof(intermediary));
 		sha3_update(&ctx, (uint8_t *)&ec->rct_count,
@@ -141,6 +147,24 @@ static void jent_hash_time(struct rand_data *ec, uint64_t time,
 			    sizeof(ec->apt_base));
 		sha3_update(&ctx, (uint8_t *)&j, sizeof(uint64_t));
 		sha3_final(&ctx, intermediary);
+	}
+#endif
+	unsigned int size = 0;
+	for (j = 0; j < hash_loop_cnt; j++) {
+		EVP_DigestUpdate(&ctx_evp, intermediary, sizeof(intermediary));
+		EVP_DigestUpdate(&ctx_evp, (uint8_t *)&ec->rct_count,
+			    sizeof(ec->rct_count));
+		EVP_DigestUpdate(&ctx_evp, (uint8_t *)&ec->apt_cutoff,
+			    sizeof(ec->apt_cutoff));
+		EVP_DigestUpdate(&ctx_evp, (uint8_t *)&ec->apt_observations,
+			    sizeof(ec->apt_observations));
+		EVP_DigestUpdate(&ctx_evp, (uint8_t *)&ec->apt_count,
+			    sizeof(ec->apt_count));
+		EVP_DigestUpdate(&ctx_evp,(uint8_t *) &ec->apt_base,
+			    sizeof(ec->apt_base));
+		EVP_DigestUpdate(&ctx_evp, (uint8_t *)&j, sizeof(uint64_t));
+		EVP_DigestFinal_ex(&ctx_evp, intermediary, &size);
+		EVP_DigestInit_ex(&ctx_evp, EVP_sha3_256(), NULL);
 	}
 
 	/*
@@ -161,7 +185,7 @@ static void jent_hash_time(struct rand_data *ec, uint64_t time,
 	if (!stuck)
 		sha3_update(ec->hash_state, (uint8_t *)&time, sizeof(uint64_t));
 
-	jent_memset_secure(&ctx, SHA_MAX_CTX_SIZE);
+	//jent_memset_secure(&ctx, SHA_MAX_CTX_SIZE);
 	jent_memset_secure(intermediary, sizeof(intermediary));
 }
 
