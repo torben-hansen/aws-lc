@@ -38,6 +38,8 @@
 #include "jitterentropy-timer.h"
 #include "jitterentropy-sha3.h"
 
+#include "openssl/digest.h"
+
 #define MAJVERSION 3 /* API / ABI incompatible changes, functional changes that
 		      * require consumer to be updated (as long as this number
 		      * is zero, the API is not considered stable and can
@@ -444,7 +446,7 @@ static struct rand_data
 		goto err;
 
 	/* Initialize the hash state */
-	sha3_256_init(entropy_collector->hash_state);
+	EVP_DigestInit_ex(entropy_collector->hash_state, EVP_sha3_256(), NULL);
 
 	/* verify and set the oversampling rate */
 	if (osr < JENT_MIN_OSR)

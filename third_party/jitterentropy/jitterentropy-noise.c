@@ -171,7 +171,7 @@ static void jent_hash_time(struct rand_data *ec, uint64_t time,
 	 * Inject the data from the previous loop into the pool. This data is
 	 * not considered to contain any entropy, but it stirs the pool a bit.
 	 */
-	sha3_update(ec->hash_state, intermediary, sizeof(intermediary));
+	EVP_DigestUpdate(ec->hash_state, intermediary, sizeof(intermediary));
 
 	/*
 	 * Insert the time stamp into the hash context representing the pool.
@@ -183,7 +183,7 @@ static void jent_hash_time(struct rand_data *ec, uint64_t time,
 	 * according to section 3.1.5.
 	 */
 	if (!stuck)
-		sha3_update(ec->hash_state, (uint8_t *)&time, sizeof(uint64_t));
+		EVP_DigestUpdate(ec->hash_state, (uint8_t *)&time, sizeof(uint64_t));
 
 	//jent_memset_secure(&ctx, SHA_MAX_CTX_SIZE);
 	jent_memset_secure(intermediary, sizeof(intermediary));
@@ -424,9 +424,9 @@ void jent_read_random_block(struct rand_data *ec, char *dst, size_t dst_len)
 	uint8_t jent_block[SHA3_256_SIZE_DIGEST];
 
 	BUILD_BUG_ON(SHA3_256_SIZE_DIGEST != (DATA_SIZE_BITS / 8));
-
+	unsigned int size = 0;
 	/* The final operation automatically re-initializes the ->hash_state */
-	sha3_final(ec->hash_state, jent_block);
+	EVP_DigestFinal_ex(ec->hash_state, jent_block, &size);
 	if (dst_len)
 		memcpy(dst, jent_block, dst_len);
 
@@ -434,6 +434,7 @@ void jent_read_random_block(struct rand_data *ec, char *dst, size_t dst_len)
 	 * Stir the new state with the data from the old state - the digest
 	 * of the old data is not considered to have entropy.
 	 */
-	sha3_update(ec->hash_state, jent_block, sizeof(jent_block));
+	EVP_DigestInit_ex(ec->hash_state, EVP_sha3_256(), NULL);
+	EVP_DigestUpdate(ec->hash_state, jent_block, sizeof(jent_block));
 	jent_memset_secure(jent_block, sizeof(jent_block));
 }
