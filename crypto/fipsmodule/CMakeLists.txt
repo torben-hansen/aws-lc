@@ -354,9 +354,10 @@ if(FIPS_DELOCATE)
 
   go_executable(inject_hash
                 boringssl.googlesource.com/boringssl/util/fipstools/inject_hash)
+
   add_custom_command(
     OUTPUT bcm.o
-    COMMAND ./inject_hash -o bcm.o -in-archive $<TARGET_FILE:bcm_hashunset>
+    COMMAND ./inject_hash -apple -o bcm.o -in-archive $<TARGET_FILE:bcm_hashunset>
     DEPENDS bcm_hashunset inject_hash
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )

@@ -597,10 +597,6 @@ if(FIPS)
     message(FATAL_ERROR "Building AWS-LC for FIPS requires Go and Perl")
   endif()
 
-  if(NOT BUILD_SHARED_LIBS AND NOT (UNIX AND NOT APPLE))
-    message(FATAL_ERROR "Static FIPS build of AWS-LC is suported only on Linux")
-  endif()
-
   add_subdirectory(third_party/jitterentropy)
 
   add_definitions(-DBORINGSSL_FIPS)

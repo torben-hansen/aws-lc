@@ -28,7 +28,7 @@ Statement <- WS? (Label / ((GlobalDirective /
                             Directive /
                             Comment / ) WS? ((Comment? '\n') / ';')))
 GlobalDirective <- (".global" / ".globl") WS SymbolName
-Directive <- '.' DirectiveName (WS Args)?
+Directive <- '.' DirectiveName ((WS "macos" ',' WS [0-9]+ ',' WS [0-9] WS "sdk_version" WS [0-9]+ ',' WS [0-9]+) / (WS Args)?)
 DirectiveName <- [[A-Z0-9_]]+
 LocationDirective <- FileDirective / LocDirective
 FileDirective <- ".file" WS [^#\n]+

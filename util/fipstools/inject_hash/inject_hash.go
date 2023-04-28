@@ -39,7 +39,7 @@ func doLinux(objectBytes []byte, isStatic bool) ([]byte, []byte, error) {
 
 	object, err := elf.NewFile(bytes.NewReader(objectBytes))
 	if err != nil {
-		return nil, nil, errors.New("failed to parse object: " + err.Error())
+		return nil, nil, errors.New("failed to parse object (Linux): " + err.Error())
 	}
 
 	// Find the .text and, optionally, .data sections.
@@ -173,7 +173,7 @@ func doAppleOS(objectBytes []byte) ([]byte, []byte, error) {
 
 	object, err := macho.NewFile(bytes.NewReader(objectBytes))
 	if err != nil {
-		return nil, nil, errors.New("failed to parse object: " + err.Error())
+		return nil, nil, errors.New("failed to parse object (AppleOS): " + err.Error())
 	}
 
 	// Find the __text and, optionally, __const sections.
@@ -252,6 +252,10 @@ func doAppleOS(objectBytes []byte) ([]byte, []byte, error) {
 		return nil, nil, errors.New("could not find .text module boundaries in object")
 	}
 
+	if rodataSection != nil {
+		return nil, nil, errors.New("rodata section presence")
+	}
+
 	if (rodataStart == nil) != (rodataSection == nil) {
 		return nil, nil, errors.New("rodata start marker inconsistent with rodata section presence")
 	}
@@ -310,9 +314,9 @@ func do(outPath, oInput string, arInput string, appleOS bool) error {
 			return fmt.Errorf("-in-archive and -in-object are mutually exclusive")
 		}
 
-		if appleOS {
-			return fmt.Errorf("only shared libraries can be handled on macOS/iOS")
-		}
+		//if appleOS {
+		//	return fmt.Errorf("only shared libraries can be handled on macOS/iOS")
+		//}
 
 		fi, err := os.Stat(arInput)
 		if err != nil {

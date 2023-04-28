@@ -263,7 +263,7 @@ func (d *delocation) processDirective(statement, directive *node32) (*node32, er
 		}
 
 		switch sectionType {
-		case ".rodata", ".text":
+		case ".rodata", ".text", ".const":
 			// Move .rodata to .text so it may be accessed without
 			// a relocation. GCC with -fmerge-constants will place
 			// strings into separate sections, so we move all
@@ -1825,7 +1825,7 @@ func transform(w stringWriter, inputs []inputFile) error {
 	}
 	w.WriteString(fmt.Sprintf(".file %d \"inserted_by_delocate.c\"%s\n", maxObservedFileNumber+1, fileTrailing))
 	w.WriteString(fmt.Sprintf(".loc %d 1 0\n", maxObservedFileNumber+1))
-	w.WriteString("BORINGSSL_bcm_text_start:\n")
+	w.WriteString("_BORINGSSL_bcm_text_start:\n")
 
 	for _, input := range inputs {
 		if err := d.processInput(input); err != nil {
@@ -1835,7 +1835,7 @@ func transform(w stringWriter, inputs []inputFile) error {
 
 	w.WriteString(".text\n")
 	w.WriteString(fmt.Sprintf(".loc %d 2 0\n", maxObservedFileNumber+1))
-	w.WriteString("BORINGSSL_bcm_text_end:\n")
+	w.WriteString("_BORINGSSL_bcm_text_end:\n")
 
 	// Emit redirector functions. Each is a single jump instruction.
 	var redirectorNames []string
@@ -1869,7 +1869,7 @@ func transform(w stringWriter, inputs []inputFile) error {
 			})
 
 		case x86_64:
-			w.WriteString(".type " + redirector + ", @function\n")
+			//w.WriteString(".type " + redirector + ", @function\n")
 			w.WriteString(redirector + ":\n")
 			w.WriteString("\tjmp\t" + name + "\n")
 		}
@@ -1895,7 +1895,7 @@ func transform(w stringWriter, inputs []inputFile) error {
 			w.WriteString("\tblr\n")
 
 		case x86_64:
-			w.WriteString(".type " + funcName + ", @function\n")
+			//w.WriteString(".type " + funcName + ", @function\n")
 			w.WriteString(funcName + ":\n")
 			w.WriteString("\tleaq\t" + target + "(%rip), %rax\n\tret\n")
 
@@ -1950,8 +1950,8 @@ func transform(w stringWriter, inputs []inputFile) error {
 		for _, name := range externalNames {
 			parts := strings.SplitN(name, "@", 2)
 			symbol, section := parts[0], parts[1]
-			w.WriteString(".type " + symbol + "_" + section + "_external, @object\n")
-			w.WriteString(".size " + symbol + "_" + section + "_external, 8\n")
+			//w.WriteString(".type " + symbol + "_" + section + "_external, @object\n")
+			//w.WriteString(".size " + symbol + "_" + section + "_external, 8\n")
 			w.WriteString(symbol + "_" + section + "_external:\n")
 			// Ideally this would be .quad foo@GOTPCREL, but clang's
 			// assembler cannot emit a 64-bit GOTPCREL relocation. Instead,
@@ -1961,7 +1961,7 @@ func transform(w stringWriter, inputs []inputFile) error {
 			w.WriteString("\t.long 0\n")
 		}
 
-		w.WriteString(".type OPENSSL_ia32cap_get, @function\n")
+		//w.WriteString(".type OPENSSL_ia32cap_get, @function\n")
 		w.WriteString(".globl OPENSSL_ia32cap_get\n")
 		w.WriteString(localTargetName("OPENSSL_ia32cap_get") + ":\n")
 		w.WriteString("OPENSSL_ia32cap_get:\n")
@@ -1971,7 +1971,7 @@ func transform(w stringWriter, inputs []inputFile) error {
 		// Luckily, this is a fixed order iteration. So, we can write
 		// deterministic tests for this in /testdata.
 		for _, uniqueSymbol := range d.cpuCapUniqueSymbols {
-			w.WriteString(".type " + uniqueSymbol.getx86Symbol() + ", @function\n")
+			//w.WriteString(".type " + uniqueSymbol.getx86Symbol() + ", @function\n")
 			w.WriteString(uniqueSymbol.getx86Symbol() + ":\n")
 			w.WriteString("\tleaq OPENSSL_ia32cap_P(%rip), %" + uniqueSymbol.registerName + "\n")
 			w.WriteString("\tjmp " + uniqueSymbol.getx86SymbolReturn() + "\n")
@@ -1992,8 +1992,8 @@ func transform(w stringWriter, inputs []inputFile) error {
 		}
 	}
 
-	w.WriteString(".type BORINGSSL_bcm_text_hash, @object\n")
-	w.WriteString(".size BORINGSSL_bcm_text_hash, 32\n")
+	//w.WriteString(".type BORINGSSL_bcm_text_hash, @object\n")
+	//w.WriteString(".size BORINGSSL_bcm_text_hash, 32\n")
 	w.WriteString("BORINGSSL_bcm_text_hash:\n")
 	for _, b := range fipscommon.UninitHashValue {
 		w.WriteString(".byte 0x" + strconv.FormatUint(uint64(b), 16) + "\n")

@@ -66,9 +66,12 @@
 
 
 use strict;
+use File::Basename;
 
 my $flavour = shift;
 my $output  = shift;
+(my $output_file_name_no_extension = basename($output)) =~ s/\.[^.]+$//;
+(my $output_file_name_clean = $output_file_name_no_extension ) =~ tr/-/_/;
 if ($flavour =~ /\./) { $output = $flavour; undef $flavour; }
 
 open STDOUT,">$output" || die "can't open $output: $!"
@@ -375,6 +378,11 @@ my %globals;
     }
 }
 { package label;	# pick up labels, which end with :
+
+	if($apple) {
+		$decor="L\$_${output_file_name_clean}_";
+	}
+
     sub re {
 	my	($class, $line) = @_;
 	my	$self = {};
