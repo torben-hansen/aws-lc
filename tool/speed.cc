@@ -44,6 +44,8 @@ OPENSSL_MSVC_PRAGMA(warning(pop))
 #include <time.h>
 #endif
 
+
+
 #if !defined(INTERNAL_TOOL)
 // align_pointer returns |ptr|, advanced to |alignment|. |alignment| must be a
 // power of two, and |ptr| must have at least |alignment - 1| bytes of scratch
@@ -62,6 +64,8 @@ static inline void *align_pointer(void *ptr, size_t alignment) {
   return ptr;
 }
 #endif
+
+#undef INTERNAL_TOOL
 
 static inline void *BM_memset(void *dst, int c, size_t n) {
   if (n == 0) {
@@ -2081,6 +2085,7 @@ static bool SpeedSelfTest(const std::string &selected) {
   return true;
 }
 
+#if 0
 static bool SpeedJitter(size_t chunk_size) {
   struct rand_data *jitter_ec = jent_entropy_collector_alloc(0, JENT_FORCE_FIPS);
 
@@ -2116,6 +2121,7 @@ static bool SpeedJitter(std::string selected) {
   }
   return true;
 }
+#endif
 #endif
 
 static bool SpeedDHcheck(size_t prime_bit_length) {
@@ -2503,9 +2509,8 @@ bool Speed(const std::vector<std::string> &args) {
       return false;
     }
 
-#if defined(AWSLC_FIPS)
-    if (!SpeedSelfTest(selected) ||
-        !SpeedJitter(selected)) {
+#if defined(AWSLC_FIPS) 
+    if (!SpeedSelfTest(selected)) {
       return false;
     }
 #endif
