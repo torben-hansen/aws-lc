@@ -122,6 +122,42 @@ OPENSSL_INLINE int have_fast_rdrand(void) {
 
 #endif  // OPENSSL_X86_64 && !OPENSSL_NO_ASM
 
+// Replicate BoringSSL values for now
+#define CTR_DRBG_ENTROPY_INPUT_LEN 48
+#define FIPS_OVERREAD_MULTIPLIER 10
+#define LAST_BLOCK_LENGTH 16
+
+#define CIRCULAR_BUFFER_SIZE (LAST_BLOCK_LENGTH + (CTR_DRBG_ENTROPY_INPUT_LEN * FIPS_OVERREAD_MULTIPLIER))
+
+// Fixed-sized flat circular buffer with no overwriting.
+// Implementation assumes this is a completely flat representation and
+// continuous memory.
+//
+// Yes, |capacity| is not strictly needed in the current implementation because
+// the size of the memory area is known to be |CIRCULAR_BUFFFER_SIZE|. But one
+// might imagine a dynamic buffer, or a larger buffer but not all space is in
+// use. Using |capacity| can allow an easier switch to such alternative
+// implementations.
+struct circular_buffer {
+  size_t capacity;    // Max number of elements in the circular buffer
+  size_t index_read;  // Next index to read from (get)
+  size_t index_write; // Next index to write to (put)
+  size_t count;       // Number of bytes written to buffer
+  uint8_t buffer[CIRCULAR_BUFFER_SIZE]; // Continuous memory area
+};
+
+// Must be a flat representation
+struct entropy_pool {
+  struct circular_buffer buffer;
+};
+
+void entropy_pool_init(struct entropy_pool *entropy_pool);
+void entropy_pool_reset(struct entropy_pool *entropy_pool);
+int entropy_pool_add_entropy(struct entropy_pool *entropy_pool,
+  uint8_t *entropy, size_t entropy_len);
+int entropy_pool_get_entropy(struct entropy_pool *entropy_pool,
+  uint8_t *buffer_get, size_t buffer_get_size);
+
 // Don't retry forever. There is no science in picking this number and can be
 // adjusted in the future if need be. We do not backoff forever, because we
 // believe that it is easier to detect failing calls than detecting infinite

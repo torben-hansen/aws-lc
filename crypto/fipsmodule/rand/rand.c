@@ -95,6 +95,8 @@ struct rand_thread_state {
   // of Jitter to each thread. The instance is initialized/destroyed at the same
   // time as the thread state is created/destroyed.
   struct rand_data *jitter_ec;
+
+  struct entropy_pool entropy_pool;
 #endif
 };
 
@@ -129,6 +131,7 @@ static void rand_thread_state_clear_all(void) {
     OPENSSL_cleanse(cur->last_block, sizeof(cur->last_block));
 
     jent_entropy_collector_free(cur->jitter_ec);
+    entropy_pool_reset(&cur->entropy_pool);
   }
   // The locks are deliberately left locked so that any threads that are still
   // running will hang if they try to call |RAND_bytes|.
@@ -163,6 +166,7 @@ static void rand_thread_state_free(void *state_in) {
   OPENSSL_cleanse(state->last_block, sizeof(state->last_block));
 
   jent_entropy_collector_free(state->jitter_ec);
+  entropy_pool_reset(&state->entropy_pool);
 #endif
 
   OPENSSL_free(state);
@@ -372,6 +376,7 @@ void RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
     if (state->jitter_ec == NULL) {
       abort();
     }
+    entropy_pool_init(&state->entropy_pool);
 #endif
 
     state->last_block_valid = 0;
