@@ -534,7 +534,7 @@ add_dependencies(crypto_objects boringssl_prefix_symbols)
 
 function(build_libcrypto name module_source)
   if(FIPS)
-    add_library(${name} $<TARGET_OBJECTS:crypto_objects> ${CRYPTO_FIPS_OBJECTS} ${module_source} $<TARGET_OBJECTS:jitterentropy>)
+    add_library(${name} $<TARGET_OBJECTS:crypto_objects> ${CRYPTO_FIPS_OBJECTS} ${module_source})
   else()
     add_library(${name} $<TARGET_OBJECTS:crypto_objects> ${CRYPTO_FIPS_OBJECTS} ${module_source})
   endif()
@@ -671,13 +671,6 @@ if(BUILD_TESTING)
     fipsmodule/rand/urandom_test.cc
   )
 
-  # When using CPU Jitter as the entropy source (only in FIPS build)
-  # urandom_test should not be performed so we pass the compilation flag
-  # and handle it in urandom_test.cc
-  if(JITTER_ENTROPY)
-    target_compile_options(${RANDOM_TEST_EXEC} PUBLIC -DJITTER_ENTROPY)
-  endif()
-
   target_link_libraries(${RANDOM_TEST_EXEC} test_support_lib boringssl_gtest crypto)
 
   add_dependencies(all_tests ${RANDOM_TEST_EXEC})
@@ -722,7 +715,6 @@ if(BUILD_TESTING)
     fipsmodule/modes/xts_test.cc
     fipsmodule/pbkdf/pbkdf_test.cc
     fipsmodule/rand/ctrdrbg_test.cc
-    fipsmodule/rand/cpu_jitter_test.cc
     fipsmodule/rand/fork_detect_test.cc
     fipsmodule/service_indicator/service_indicator_test.cc
     fipsmodule/sha/sha_test.cc

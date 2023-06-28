@@ -271,7 +271,6 @@ int entropy_pool_add_entropy(struct entropy_pool *entropy_pool,
 
   entropy_pool_debug_print(entropy_pool, (char *) "entropy_pool_add_entropy()");
 
-
   size_t entropy_max_can_add = circular_buffer_max_can_put(&entropy_pool->buffer);
   if (entropy_max_can_add < entropy_len) {
     goto end;

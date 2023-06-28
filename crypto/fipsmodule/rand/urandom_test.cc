@@ -392,9 +392,12 @@ static bool have_fork_detection() {
 static std::vector<Event> TestFunctionPRNGModel(unsigned flags) {
 #if defined(BORINGSSL_FIPS)
   static const bool is_fips = true;
+  const size_t kSeedLength = PASSIVE_ENTROPY_LEN;
 #else
   static const bool is_fips = false;
+  const size_t kSeedLength = CTR_DRBG_ENTROPY_LEN;
 #endif
+  const size_t kPersonalisationDataLength = CTR_DRBG_ENTROPY_LEN;
 
   std::vector<Event> ret;
   bool urandom_probed = false;
@@ -469,7 +472,6 @@ static std::vector<Event> TestFunctionPRNGModel(unsigned flags) {
     };
   }
 
-  const size_t kSeedLength = CTR_DRBG_ENTROPY_LEN;
   const size_t kAdditionalDataLength = 32;
 
   if (!have_rdrand()) {

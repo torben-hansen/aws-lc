@@ -232,11 +232,6 @@ static void BORINGSSL_bcm_power_on_self_test(void) {
   OPENSSL_cpuid_setup();
 #endif
 
-  if (jent_entropy_init()) {
-    fprintf(stderr, "CPU Jitter entropy RNG initialization failed.\n");
-    goto err;
-  }
-
 #if !defined(OPENSSL_ASAN)
   // Integrity tests cannot run under ASAN because it involves reading the full
   // .text section, which triggers the global-buffer overflow detection.
