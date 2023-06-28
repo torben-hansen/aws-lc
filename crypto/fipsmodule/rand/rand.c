@@ -97,6 +97,7 @@ struct rand_thread_state {
   struct rand_data *jitter_ec;
 
   struct entropy_pool entropy_pool;
+  int want_additional_input;
 #endif
 };
 
@@ -220,14 +221,53 @@ static int rdrand(uint8_t *buf, size_t len) {
 
 #if defined(BORINGSSL_FIPS)
 
+OPENSSL_STATIC_ASSERT(CIRCULAR_BUFFER_SIZE == PASSIVE_ENTROPY_LEN, ensure_equality_while_development)
+void RAND_load_entropy(const uint8_t *entropy, size_t entropy_len,
+                       int want_additional_input) {
+  struct rand_thread_state *state =
+      CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_RAND);
+  if (state == NULL) {
+    abort();
+  }
+
+  if (entropy_pool_add_entropy(&state->entropy_pool, entropy,
+      PASSIVE_ENTROPY_LEN) != 1) {
+    abort();
+  }
+  // Currently, pool is completely replaced at seed-time.
+  // if this changes, below needs to be an OR.
+  state->want_additional_input = want_additional_input;
+}
+
+void CRYPTO_get_seed_entropy(uint8_t *out_entropy, size_t out_entropy_len,
+                             int *out_want_additional_input) {
+  *out_want_additional_input = 0;
+  if (have_rdrand() && rdrand(out_entropy, out_entropy_len)) {
+    *out_want_additional_input = 1;
+  } else {
+    CRYPTO_sysrand_for_seed(out_entropy, out_entropy_len);
+  }
+}
+
 static void CRYPTO_get_fips_seed(uint8_t *out_entropy, size_t out_entropy_len,
                                  int *out_want_additional_input) {
   *out_want_additional_input = 0;
-  // Every thread has its own Jitter instance so we fetch the one assigned
-  // to the current thread.
+
+  // Serialised out-of-module request that entropy pool is depleted. Will always
+  // spawn an attempt to load entropy into the per-thread entropy pool and will
+  // always abort if it fails.
+  RAND_module_entropy_depleted();
+
+
   struct rand_thread_state *state =
       CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_RAND);
   if (state == NULL || state->jitter_ec == NULL) {
+    abort();
+  }
+
+  uint8_t nonsense_buffer[PASSIVE_ENTROPY_LEN];
+  if (entropy_pool_get_entropy(&state->entropy_pool, nonsense_buffer,
+      sizeof(nonsense_buffer)) != 1) {
     abort();
   }
 

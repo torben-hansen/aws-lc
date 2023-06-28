@@ -122,12 +122,15 @@ OPENSSL_INLINE int have_fast_rdrand(void) {
 
 #endif  // OPENSSL_X86_64 && !OPENSSL_NO_ASM
 
+#if defined(AWSLC_FIPS)
+
 // Replicate BoringSSL values for now
 #define CTR_DRBG_ENTROPY_INPUT_LEN 48
 #define FIPS_OVERREAD_MULTIPLIER 10
 #define LAST_BLOCK_LENGTH 16
+#define PASSIVE_ENTROPY_LEN (LAST_BLOCK_LENGTH + (CTR_DRBG_ENTROPY_INPUT_LEN * FIPS_OVERREAD_MULTIPLIER))
+#define CIRCULAR_BUFFER_SIZE PASSIVE_ENTROPY_LEN
 
-#define CIRCULAR_BUFFER_SIZE (LAST_BLOCK_LENGTH + (CTR_DRBG_ENTROPY_INPUT_LEN * FIPS_OVERREAD_MULTIPLIER))
 
 // Fixed-sized flat circular buffer with no overwriting.
 // Implementation assumes this is a completely flat representation and
@@ -154,9 +157,19 @@ struct entropy_pool {
 void entropy_pool_init(struct entropy_pool *entropy_pool);
 void entropy_pool_reset(struct entropy_pool *entropy_pool);
 int entropy_pool_add_entropy(struct entropy_pool *entropy_pool,
-  uint8_t *entropy, size_t entropy_len);
+  const uint8_t *entropy, size_t entropy_len);
 int entropy_pool_get_entropy(struct entropy_pool *entropy_pool,
   uint8_t *buffer_get, size_t buffer_get_size);
+
+void CRYPTO_get_seed_entropy(uint8_t *out_entropy, size_t out_entropy_len,
+                             int *out_want_additional_input);
+void RAND_module_entropy_depleted(void);
+void RAND_load_entropy(const uint8_t *entropy, size_t entropy_len,
+                       int want_additional_input);
+
+void RAND_module_entropy_depleted(void);
+
+#endif
 
 // Don't retry forever. There is no science in picking this number and can be
 // adjusted in the future if need be. We do not backoff forever, because we

@@ -14,6 +14,8 @@
 
 // Circular buffer implementation
 
+#if defined(AWSLC_FIPS)
+
 // Otherwise a useless circular buffer...
 OPENSSL_STATIC_ASSERT(CIRCULAR_BUFFER_SIZE > 0, CIRCULAR_BUFFER_SIZE_must_be_strictly_larger_than_0);
 
@@ -98,7 +100,7 @@ static size_t circular_buffer_max_can_put(struct circular_buffer *buffer) {
 // |buffer_write| to circular buffer |buffer|.
 // Note!!!! this function cannot handle overflows.
 static int circular_buffer_write(struct circular_buffer *buffer,
-  uint8_t *buffer_write, size_t buffer_write_size) {
+  const uint8_t *buffer_write, size_t buffer_write_size) {
 
   // Make sure not to overflow buffer. This means that this function cannot
   // handle overflows. -1 because we first write to
@@ -120,7 +122,7 @@ static int circular_buffer_write(struct circular_buffer *buffer,
 // circular buffer |buffer|.
 // This function handles overflow.
 static int circular_buffer_put(struct circular_buffer *buffer,
-  uint8_t *buffer_put, size_t buffer_put_size) {
+  const uint8_t *buffer_put, size_t buffer_put_size) {
 
   circular_buffer_debug_print(buffer, (char *) "circular_buffer_put()");
 
@@ -263,7 +265,7 @@ void entropy_pool_reset(struct entropy_pool *entropy_pool) {
 // TODO could optimise this function by just always generating ENTROPY_POOL_ADD_ENTROPY_MAX_SIZE
 // but without taking the lock...
 int entropy_pool_add_entropy(struct entropy_pool *entropy_pool,
-  uint8_t *entropy, size_t entropy_len) {
+  const uint8_t *entropy, size_t entropy_len) {
 
   int ret = 0;
 
@@ -315,3 +317,5 @@ end:
   }
   return ret;
 }
+
+#endif
