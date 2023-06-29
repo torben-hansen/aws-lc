@@ -122,8 +122,6 @@ OPENSSL_INLINE int have_fast_rdrand(void) {
 
 #endif  // OPENSSL_X86_64 && !OPENSSL_NO_ASM
 
-#if defined(AWSLC_FIPS)
-
 // Replicate BoringSSL values for now
 #define CTR_DRBG_ENTROPY_INPUT_LEN 48
 #define FIPS_OVERREAD_MULTIPLIER 10
@@ -131,6 +129,7 @@ OPENSSL_INLINE int have_fast_rdrand(void) {
 #define PASSIVE_ENTROPY_LEN (LAST_BLOCK_LENGTH + (CTR_DRBG_ENTROPY_INPUT_LEN * FIPS_OVERREAD_MULTIPLIER))
 #define CIRCULAR_BUFFER_SIZE PASSIVE_ENTROPY_LEN
 
+#if defined(AWSLC_FIPS)
 
 // Fixed-sized flat circular buffer with no overwriting.
 // Implementation assumes this is a completely flat representation and
