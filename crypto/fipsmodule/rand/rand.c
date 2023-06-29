@@ -51,19 +51,12 @@
 // This might be a bit of a leap of faith, esp on Windows, but there's nothing
 // that we can do about it.)
 
-// When in FIPS mode we use the CPU Jitter entropy source to seed our DRBG.  
-// This entropy source is very slow and can incur a cost anywhere between 10-60ms
-// depending on configuration and CPU.  Increasing to 2^24 will amortize the 
-// penalty over more requests.  This is the same value used in OpenSSL 3.0  
-// and meets the requirements defined in SP 800-90B for a max reseed of interval (2^48)
-//
-// CPU Jitter:  https://www.chronox.de/jent/doc/CPU-Jitter-NPTRNG.html
-// 
+
 // kReseedInterval is the number of generate calls made to CTR-DRBG before
 // reseeding.
 
 #if defined(BORINGSSL_FIPS)
-static const unsigned kReseedInterval = 16777216;
+static const unsigned kReseedInterval = 4096;
 #else
 static const unsigned kReseedInterval = 4096;
 #endif
@@ -89,8 +82,9 @@ struct rand_thread_state {
   // next and prev form a NULL-terminated, double-linked list of all states in
   // a process.
   struct rand_thread_state *next, *prev;
-
+  // stores entropy loaded form outside the module
   struct entropy_pool entropy_pool;
+  // signals we want to add additional data during seeding
   int want_additional_input;
 #endif
 };
@@ -222,6 +216,7 @@ void RAND_load_entropy(const uint8_t *entropy, size_t entropy_len,
     abort();
   }
 
+  // Currently, and for simplicity, reset entropy pool for each load.
   entropy_pool_reset(&state->entropy_pool);
   if (entropy_pool_add_entropy(&state->entropy_pool, entropy,
       PASSIVE_ENTROPY_LEN) != 1) {
@@ -246,9 +241,9 @@ static void CRYPTO_get_fips_seed(uint8_t *out_entropy, size_t out_entropy_len,
                                  int *out_want_additional_input) {
   *out_want_additional_input = 0;
 
-  // Serialised out-of-module request that entropy pool is depleted. Will always
-  // spawn an attempt to load entropy into the per-thread entropy pool and will
-  // always abort if it fails.
+  // Out-of-module request that entropy pool is depleted. Will always spawn an
+  // attempt to load entropy into the per-thread entropy pool and will always
+  // abort if it fails.
   RAND_module_entropy_depleted();
 
   struct rand_thread_state *state =
@@ -277,11 +272,14 @@ static void rand_get_seed(struct rand_thread_state *state,
                           int *out_want_additional_input) {
 
   uint8_t entropy_array[PASSIVE_ENTROPY_LEN];
+  // Allows pointer arithmetic
   uint8_t *entropy = entropy_array;
   size_t entropy_len = sizeof(entropy_array);
   CRYPTO_get_fips_seed(entropy, entropy_len, out_want_additional_input);
 
   if (!state->last_block_valid) {
+    // On first (per-thread) entry, need to reserve some entropy for the
+    // CRNGT test. 
     OPENSSL_memcpy(state->last_block, entropy, sizeof(state->last_block));
     state->last_block_valid = 1;
     entropy += sizeof(state->last_block);
@@ -296,10 +294,8 @@ static void rand_get_seed(struct rand_thread_state *state,
     BORINGSSL_FIPS_abort();
   }
 
-
-  OPENSSL_STATIC_ASSERT((CTR_DRBG_ENTROPY_INPUT_LEN * FIPS_OVERREAD_MULTIPLIER) % CRNGT_BLOCK_SIZE == 0, entropy_length_not_divisible_by_ctr_drbg_block_size)
-  for (size_t i = CRNGT_BLOCK_SIZE; i < entropy_len;
-       i += CRNGT_BLOCK_SIZE) {
+  OPENSSL_STATIC_ASSERT((PASSIVE_ENTROPY_LEN - sizeof(state->last_block)) % CRNGT_BLOCK_SIZE == 0, entropy_length_not_divisible_by_ctr_drbg_block_size)
+  for (size_t i = CRNGT_BLOCK_SIZE; i < entropy_len; i += CRNGT_BLOCK_SIZE) {
     if (CRYPTO_memcmp(entropy + i - CRNGT_BLOCK_SIZE, entropy + i,
                       CRNGT_BLOCK_SIZE) == 0) {
       fprintf(stderr, "CRNGT failed.\n");
@@ -311,6 +307,11 @@ static void rand_get_seed(struct rand_thread_state *state,
                  CRNGT_BLOCK_SIZE);
 
   OPENSSL_memcpy(seed, entropy, CTR_DRBG_ENTROPY_LEN);
+  for (size_t i = 1; i < FIPS_OVERREAD_MULTIPLIER; i++) {
+    for (size_t j = 0; j < CTR_DRBG_ENTROPY_LEN; j++) {
+      seed[j] ^= entropy[CTR_DRBG_ENTROPY_LEN * i + j];
+    }
+  }
 }
 
 #else // BORINGSSL_FIPS
