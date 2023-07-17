@@ -130,3 +130,6 @@ extern void curve25519_x25519_byte_alt(uint8_t res[static 32], const uint8_t sca
 // another u-coordinate, is saved in |res|.
 extern void curve25519_x25519base_byte(uint8_t res[static 32], const uint8_t scalar[static 32]);
 extern void curve25519_x25519base_byte_alt(uint8_t res[static 32], const uint8_t scalar[static 32]);
+
+extern void edwards25519_scalarmulbase(uint64_t res[static 8],uint64_t scalar[static 4]);
+extern void edwards25519_scalarmulbase_alt(uint64_t res[static 8],uint64_t scalar[static 4]);

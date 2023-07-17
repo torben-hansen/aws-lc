@@ -219,6 +219,8 @@ if((ARCH STREQUAL "x86_64" OR ARCH STREQUAL "aarch64") AND
                 curve25519/curve25519_x25519_alt.S
                 curve25519/curve25519_x25519base.S
                 curve25519/curve25519_x25519base_alt.S
+                curve25519/edwards25519_scalarmulbase.S
+                curve25519/edwards25519_scalarmulbase_alt.S
                 )
   elseif(ARCH STREQUAL "aarch64")
     # byte-level interface for aarch64 s2n-bignum curve25519 is in
