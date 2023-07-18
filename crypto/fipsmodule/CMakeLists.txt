@@ -230,6 +230,8 @@ if((ARCH STREQUAL "x86_64" OR ARCH STREQUAL "aarch64") AND
                 curve25519/curve25519_x25519_byte_alt.S
                 curve25519/curve25519_x25519base_byte.S
                 curve25519/curve25519_x25519base_byte_alt.S
+                curve25519/edwards25519_scalarmulbase.S
+                curve25519/edwards25519_scalarmulbase_alt.S
                 )
   endif()
 endif()
