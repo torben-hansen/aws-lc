@@ -278,13 +278,6 @@ static void ed25519_s2n_bignum_public_from_private(
   ed25519_s2n_bignum_public_key_encode(out_public_value, uint64_point);
 }
 
-void ed25519_public_from_private_nohw(uint8_t out_public_key[32],
-  uint8_t hashed_seed[32]) {
-  ge_p3 A;
-  x25519_ge_scalarmult_base(&A, hashed_seed);
-  ge_p3_tobytes(out_public_key, &A);
-}
-
 void ED25519_keypair_from_seed(uint8_t out_public_key[32],
                                uint8_t out_private_key[64],
                                const uint8_t seed[ED25519_SEED_LEN]) {
