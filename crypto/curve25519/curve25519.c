@@ -268,6 +268,16 @@ static void ed25519_s2n_bignum_public_from_private(
     abort();
   }
 
+#elif defined(OPENSSL_AARCH64)
+
+  if (x25519_s2n_bignum_alt_capable() == 1) {
+    edwards25519_scalarmulbase_alt(uint64_point, uint64_hashed_seed);
+  } else if (x25519_s2n_bignum_no_alt_capable() == 1) {
+    edwards25519_scalarmulbase(uint64_point, uint64_hashed_seed);
+  } else {
+    abort();
+  }
+
 #else
 
   // Should not call this function unless s2n-bignum is supported.
@@ -306,6 +316,16 @@ static void ed25519_s2n_bignum_scalarmult_base_b(uint8_t R[32],
     edwards25519_scalarmulbase(uint64_R, uint64_r);
   } else if (x25519_s2n_bignum_alt_capable() == 1) {
     edwards25519_scalarmulbase_alt(uint64_R, uint64_r);
+  } else {
+    abort();
+  }
+
+#elif defined(OPENSSL_AARCH64)
+
+  if (x25519_s2n_bignum_alt_capable() == 1) {
+    edwards25519_scalarmulbase_alt(uint64_R, uint64_r);
+  } else if (x25519_s2n_bignum_no_alt_capable() == 1) {
+    edwards25519_scalarmulbase(uint64_R, uint64_r);
   } else {
     abort();
   }
