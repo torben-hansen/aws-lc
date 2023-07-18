@@ -1975,3 +1975,11 @@ void ed25519_public_from_private_nohw(uint8_t out_public_key[32],
   ge_p3_tobytes(out_public_key, &A);
 }
 
+// In current implementation form, could be replaced by ed25519_public_from_private_nohw
+// but keeping two different functions for clarity.
+void ed25519_scalarmult_base_b_nohw(uint8_t out_sig[32], uint8_t r[32]) {
+  ge_p3 R;
+  x25519_ge_scalarmult_base(&R, r);
+  ge_p3_tobytes(out_sig, &R);
+}
+

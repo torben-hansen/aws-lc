@@ -278,6 +278,48 @@ static void ed25519_s2n_bignum_public_from_private(
   ed25519_s2n_bignum_public_key_encode(out_public_value, uint64_point);
 }
 
+// Basically, the same as ed25519_s2n_bignum_public_key_encode.
+static void ed25519_s2n_bignum_encode_R(
+  uint8_t R[32], const uint64_t uint64_R[8]) {
+
+  // Type convert to public prototype buffer type.
+  OPENSSL_memcpy(R, &uint64_R[4], 32);
+
+  // Encode parity bit in verification key to compress x-coordinate.
+  // The lexicographical order determines the parity of the F_q field element
+  // which just really collapses to the parity of the encoded field element.
+  // little-endian, so just check the LSB.
+  uint8_t lsb_byte_x = (uint8_t) uint64_R[0];
+  R[31] ^= ((lsb_byte_x & 1) << 7);
+}
+
+static void ed25519_s2n_bignum_scalarmult_base_b(uint8_t R[32],
+  const uint8_t r[32]) {
+
+  uint64_t uint64_R[8] = {0};
+  uint64_t uint64_r[4] = {0};
+  OPENSSL_memcpy(uint64_r, r, 32);
+
+#if defined(OPENSSL_X86_64)
+
+  if (x25519_s2n_bignum_no_alt_capable() == 1) {
+    edwards25519_scalarmulbase(uint64_R, uint64_r);
+  } else if (x25519_s2n_bignum_alt_capable() == 1) {
+    edwards25519_scalarmulbase_alt(uint64_R, uint64_r);
+  } else {
+    abort();
+  }
+
+#else
+
+  // Should not call this function unless s2n-bignum is supported.
+  abort();
+
+#endif
+
+  ed25519_s2n_bignum_encode_R(R, uint64_R);
+}
+
 void ED25519_keypair_from_seed(uint8_t out_public_key[32],
                                uint8_t out_private_key[64],
                                const uint8_t seed[ED25519_SEED_LEN]) {
@@ -288,7 +330,7 @@ void ED25519_keypair_from_seed(uint8_t out_public_key[32],
   az[31] &= 127;
   az[31] |= 64;
 
-  if (x25519_s2n_bignum_capable() == 0) {
+  if (x25519_s2n_bignum_capable() == 1) {
     ed25519_s2n_bignum_public_from_private(out_public_key, az);
   } else {
     ed25519_public_from_private_nohw(out_public_key, az);
@@ -327,9 +369,14 @@ int ED25519_sign(uint8_t out_sig[64], const uint8_t *message,
   SHA512_Final(nonce, &hash_ctx);
 
   x25519_sc_reduce(nonce);
-  ge_p3 R;
-  x25519_ge_scalarmult_base(&R, nonce);
-  ge_p3_tobytes(out_sig, &R);
+
+  // The final signature, will have the result R in the first 32 octets.
+  // Can conveniently put R there straightaway.
+  if (x25519_s2n_bignum_capable() == 1) {
+    ed25519_s2n_bignum_scalarmult_base_b(out_sig, nonce);
+  } else {
+    ed25519_scalarmult_base_b_nohw(out_sig, nonce);
+  }
 
   SHA512_Init(&hash_ctx);
   SHA512_Update(&hash_ctx, out_sig, 32);
