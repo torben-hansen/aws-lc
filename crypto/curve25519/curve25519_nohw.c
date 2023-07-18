@@ -1967,3 +1967,11 @@ void x25519_public_from_private_nohw(uint8_t out_public_value[32],
   fe_mul_tlt(&zminusy_inv, &zplusy, &zminusy_inv);
   fe_tobytes(out_public_value, &zminusy_inv);
 }
+
+void ed25519_public_from_private_nohw(uint8_t out_public_key[32],
+  uint8_t hashed_seed[32]) {
+  ge_p3 A;
+  x25519_ge_scalarmult_base(&A, hashed_seed);
+  ge_p3_tobytes(out_public_key, &A);
+}
+

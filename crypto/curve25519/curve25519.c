@@ -59,6 +59,9 @@ void curve25519_x25519_byte_alt(uint8_t res[32], const uint8_t scalar[32],
   const uint8_t point[32]);
 void curve25519_x25519base_byte(uint8_t res[32], const uint8_t scalar[32]);
 void curve25519_x25519base_byte_alt(uint8_t res[32], const uint8_t scalar[32]);
+void edwards25519_scalarmulbase(uint64_t res[8], uint64_t scalar[4]);
+void edwards25519_scalarmulbase_alt(uint64_t res[8], uint64_t scalar[4]);
+
 
 void curve25519_x25519_byte(uint8_t res[32], const uint8_t scalar[32],
   const uint8_t point[32]) {
@@ -74,6 +77,10 @@ void curve25519_x25519base_byte(uint8_t res[32], const uint8_t scalar[32]) {
 void curve25519_x25519base_byte_alt(uint8_t res[32], const uint8_t scalar[32]) {
   abort();
 }
+
+void edwards25519_scalarmulbase(uint64_t res[8], uint64_t scalar[4]) { abort(); }
+void edwards25519_scalarmulbase_alt(uint64_t res[8], uint64_t scalar[4]) { abort(); }
+
 
 #endif // !defined(CURVE25519_S2N_BIGNUM_CAPABLE)
 
@@ -230,6 +237,53 @@ static void x25519_s2n_bignum_public_from_private(
 #endif
 }
 
+static void ed25519_s2n_bignum_public_key_encode(
+  uint8_t out_public_value[32], const uint64_t uint64_point[8]) {
+
+  // Type convert to public prototype buffer type.
+  OPENSSL_memcpy(out_public_value, &uint64_point[4], 32);
+
+  // Encode parity bit in verification key to compress x-coordinate.
+  // The lexicographical order determines the parity of the F_q field element
+  // which just really collapses to the parity of the encoded field element.
+  // little-endian, so just check the LSB.
+  uint8_t lsb_byte_x = (uint8_t) uint64_point[0];
+  out_public_value[31] ^= ((lsb_byte_x & 1) << 7);
+}
+
+static void ed25519_s2n_bignum_public_from_private(
+  uint8_t out_public_value[32], const uint8_t hashed_seed[32]) {
+
+  uint64_t uint64_point[8] = {0};
+  uint64_t uint64_hashed_seed[4] = {0};
+  OPENSSL_memcpy(uint64_hashed_seed, hashed_seed, 32);
+
+#if defined(OPENSSL_X86_64)
+
+  if (x25519_s2n_bignum_no_alt_capable() == 1) {
+    edwards25519_scalarmulbase(uint64_point, uint64_hashed_seed);
+  } else if (x25519_s2n_bignum_alt_capable() == 1) {
+    edwards25519_scalarmulbase_alt(uint64_point, uint64_hashed_seed);
+  } else {
+    abort();
+  }
+
+#else
+
+  // Should not call this function unless s2n-bignum is supported.
+  abort();
+
+#endif
+
+  ed25519_s2n_bignum_public_key_encode(out_public_value, uint64_point);
+}
+
+void ed25519_public_from_private_nohw(uint8_t out_public_key[32],
+  uint8_t hashed_seed[32]) {
+  ge_p3 A;
+  x25519_ge_scalarmult_base(&A, hashed_seed);
+  ge_p3_tobytes(out_public_key, &A);
+}
 
 void ED25519_keypair_from_seed(uint8_t out_public_key[32],
                                uint8_t out_private_key[64],
@@ -241,9 +295,11 @@ void ED25519_keypair_from_seed(uint8_t out_public_key[32],
   az[31] &= 127;
   az[31] |= 64;
 
-  ge_p3 A;
-  x25519_ge_scalarmult_base(&A, az);
-  ge_p3_tobytes(out_public_key, &A);
+  if (x25519_s2n_bignum_capable() == 0) {
+    ed25519_s2n_bignum_public_from_private(out_public_key, az);
+  } else {
+    ed25519_public_from_private_nohw(out_public_key, az);
+  }
 
   OPENSSL_memcpy(out_private_key, seed, ED25519_SEED_LEN);
   OPENSSL_memcpy(out_private_key + ED25519_SEED_LEN, out_public_key, 32);
