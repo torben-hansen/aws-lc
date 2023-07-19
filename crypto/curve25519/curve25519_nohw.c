@@ -1983,3 +1983,21 @@ void ed25519_scalarmult_base_b_nohw(uint8_t out_sig[32], uint8_t r[32]) {
   ge_p3_tobytes(out_sig, &R);
 }
 
+void ge_p3_tobytes_no_compression(uint64_t out_point[8], const ge_p3 *h) {
+  fe recip;
+  fe x;
+  fe y;
+
+  uint8_t x_buffer[32] = {0};
+  uint8_t y_buffer[32] = {0};
+
+  fe_invert(&recip, &h->Z);
+  fe_mul_ttt(&x, &h->X, &recip);
+  fe_mul_ttt(&y, &h->Y, &recip);
+  fe_tobytes(x_buffer, &x);
+  fe_tobytes(y_buffer, &y);
+
+  OPENSSL_memcpy(out_point, x_buffer, sizeof(x_buffer));
+  OPENSSL_memcpy(&out_point[4], y_buffer, sizeof(y_buffer));
+}
+

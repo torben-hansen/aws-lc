@@ -117,6 +117,7 @@ void x25519_public_from_private_nohw(uint8_t out_public_value[32],
 void ed25519_public_from_private_nohw(uint8_t out_public_key[32],
   uint8_t hashed_seed[32]);
 void ed25519_scalarmult_base_b_nohw(uint8_t out_sig[32], uint8_t r[32]);
+void ge_p3_tobytes_no_compression(uint64_t out_point[8], const ge_p3 *A);
 
 // Port to internal linkage in curve25519_nohw.c when adding implementation
 // from s2n-bignum ed25519

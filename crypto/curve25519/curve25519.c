@@ -340,6 +340,45 @@ static void ed25519_s2n_bignum_scalarmult_base_b(uint8_t R[32],
   ed25519_s2n_bignum_encode_R(R, uint64_R);
 }
 
+static void ed25519_s2n_bignum_double_scalarmult(uint8_t R[32],
+  uint8_t scalar[32], uint64_t point[8], uint8_t bscalar[32]) {
+
+  uint64_t uint64_R[8] = {0};
+  uint64_t uint64_scalar[8] = {0};
+  uint64_t uint64_bscalar[8] = {0};
+  OPENSSL_memcpy(uint64_scalar, scalar, 32);
+  OPENSSL_memcpy(uint64_bscalar, bscalar, 32);
+
+#if defined(OPENSSL_X86_64)
+
+  if (x25519_s2n_bignum_no_alt_capable() == 1) {
+    edwards25519_scalarmuldouble(uint64_R, uint64_scalar, point, uint64_bscalar);
+  } else if (x25519_s2n_bignum_alt_capable() == 1) {
+    edwards25519_scalarmuldouble_alt(uint64_R, uint64_scalar, point, uint64_bscalar);
+  } else {
+    abort();
+  }
+
+#elif defined(OPENSSL_AARCH64)
+
+  if (x25519_s2n_bignum_alt_capable() == 1) {
+    edwards25519_scalarmuldouble_alt(uint64_R, uint64_scalar, point, uint64_bscalar);
+  } else if (x25519_s2n_bignum_no_alt_capable() == 1) {
+    edwards25519_scalarmuldouble(uint64_R, uint64_scalar, point, uint64_bscalar);
+  } else {
+    abort();
+  }
+
+#else
+
+  // Should not call this function unless s2n-bignum is supported.
+  abort();
+
+#endif
+
+  ed25519_s2n_bignum_encode_R(R, uint64_R);
+}
+
 void ED25519_keypair_from_seed(uint8_t out_public_key[32],
                                uint8_t out_private_key[64],
                                const uint8_t seed[ED25519_SEED_LEN]) {
@@ -411,27 +450,7 @@ int ED25519_sign(uint8_t out_sig[64], const uint8_t *message,
   return 1;
 }
 
-int ED25519_verify(const uint8_t *message, size_t message_len,
-                   const uint8_t signature[64], const uint8_t public_key[32]) {
-  ge_p3 A;
-  if ((signature[63] & 224) != 0 ||
-      !x25519_ge_frombytes_vartime(&A, public_key)) {
-    return 0;
-  }
-
-  fe_loose t;
-  fe_neg(&t, &A.X);
-  fe_carry(&A.X, &t);
-  fe_neg(&t, &A.T);
-  fe_carry(&A.T, &t);
-
-  uint8_t pkcopy[32];
-  OPENSSL_memcpy(pkcopy, public_key, 32);
-  uint8_t rcopy[32];
-  OPENSSL_memcpy(rcopy, signature, 32);
-  uint8_t scopy[32];
-  OPENSSL_memcpy(scopy, signature + 32, 32);
-
+static int ed25519_verify_malleability(uint8_t scopy[32]) {
   // https://tools.ietf.org/html/rfc8032#section-5.1.7 requires that s be in
   // the range [0, order) in order to prevent signature malleability.
 
@@ -453,6 +472,35 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
     }
   }
 
+  return 1;
+}
+
+
+static int ED25519_verify_nohw(const uint8_t *message, size_t message_len,
+                   const uint8_t signature[64], const uint8_t public_key[32]) {
+  ge_p3 A;
+  if ((signature[63] & 224) != 0 ||
+      !x25519_ge_frombytes_vartime(&A, public_key)) {
+    return 0;
+  }
+
+  fe_loose t;
+  fe_neg(&t, &A.X);
+  fe_carry(&A.X, &t);
+  fe_neg(&t, &A.T);
+  fe_carry(&A.T, &t);
+
+  uint8_t pkcopy[32];
+  OPENSSL_memcpy(pkcopy, public_key, 32);
+  uint8_t rcopy[32];
+  OPENSSL_memcpy(rcopy, signature, 32);
+  uint8_t scopy[32];
+  OPENSSL_memcpy(scopy, signature + 32, 32);
+
+  if (ed25519_verify_malleability(scopy) != 1) {
+    return 0;
+  }
+
   SHA512_CTX hash_ctx;
   SHA512_Init(&hash_ctx);
   SHA512_Update(&hash_ctx, signature, 32);
@@ -470,6 +518,63 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
   x25519_ge_tobytes(rcheck, &R);
 
   return CRYPTO_memcmp(rcheck, rcopy, sizeof(rcheck)) == 0;
+}
+
+static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
+                   const uint8_t signature[64], const uint8_t public_key[32]) {
+  ge_p3 A;
+  if ((signature[63] & 224) != 0 ||
+      !x25519_ge_frombytes_vartime(&A, public_key)) {
+    return 0;
+  }
+
+  fe_loose t;
+  fe_neg(&t, &A.X);
+  fe_carry(&A.X, &t);
+  fe_neg(&t, &A.T);
+  fe_carry(&A.T, &t);
+
+  uint8_t pkcopy[32];
+  OPENSSL_memcpy(pkcopy, public_key, 32);
+  uint8_t rcopy[32];
+  OPENSSL_memcpy(rcopy, signature, 32);
+  uint8_t scopy[32];
+  OPENSSL_memcpy(scopy, signature + 32, 32);
+
+  if (ed25519_verify_malleability(scopy) != 1) {
+    return 0;
+  }
+
+  SHA512_CTX hash_ctx;
+  SHA512_Init(&hash_ctx);
+  SHA512_Update(&hash_ctx, signature, 32);
+  SHA512_Update(&hash_ctx, public_key, 32);
+  SHA512_Update(&hash_ctx, message, message_len);
+  uint8_t h[SHA512_DIGEST_LENGTH];
+  SHA512_Final(h, &hash_ctx);
+
+  x25519_sc_reduce(h);
+
+  // First produce encoded point A, but un-compressed!
+  // Then, compute the scalar multiplications and additions in one go
+  // using the s2n-bignum function. Output from the wrapped s2n-bignum function
+  // is a compressed point, so no need to encode just validate.
+  uint64_t uint64_point[8] = {0};
+  uint8_t R[32] = {0};
+  ge_p3_tobytes_no_compression(uint64_point, &A);
+  ed25519_s2n_bignum_double_scalarmult(R, h, uint64_point, scopy);
+
+  return CRYPTO_memcmp(R, rcopy, sizeof(R)) == 0;
+}
+
+int ED25519_verify(const uint8_t *message, size_t message_len,
+                   const uint8_t signature[64], const uint8_t public_key[32]) {
+
+  if (x25519_s2n_bignum_capable() == 0) {
+    return ED25519_verify_s2n_bignum(message, message_len, signature, public_key);
+  }
+
+  return ED25519_verify_nohw(message, message_len, signature, public_key);
 }
 
 
