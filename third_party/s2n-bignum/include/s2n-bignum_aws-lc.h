@@ -133,3 +133,6 @@ extern void curve25519_x25519base_byte_alt(uint8_t res[static 32], const uint8_t
 
 extern void edwards25519_scalarmulbase(uint64_t res[static 8],uint64_t scalar[static 4]);
 extern void edwards25519_scalarmulbase_alt(uint64_t res[static 8],uint64_t scalar[static 4]);
+
+extern void edwards25519_scalarmuldouble(uint64_t res[8], uint64_t scalar[4], uint64_t point[8],uint64_t bscalar[4]);
+extern void edwards25519_scalarmuldouble_alt(uint64_t res[8], uint64_t scalar[4], uint64_t point[8],uint64_t bscalar[4]);
