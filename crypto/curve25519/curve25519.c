@@ -570,7 +570,7 @@ static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
 int ED25519_verify(const uint8_t *message, size_t message_len,
                    const uint8_t signature[64], const uint8_t public_key[32]) {
 
-  if (x25519_s2n_bignum_capable() == 0) {
+  if (x25519_s2n_bignum_capable() == 1) {
     return ED25519_verify_s2n_bignum(message, message_len, signature, public_key);
   }
 
