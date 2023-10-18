@@ -223,6 +223,9 @@ if((ARCH STREQUAL "x86_64" OR ARCH STREQUAL "aarch64") AND
                 curve25519/edwards25519_scalarmulbase_alt.S
                 curve25519/edwards25519_scalarmuldouble.S
                 curve25519/edwards25519_scalarmuldouble_alt.S
+                curve25519/edwards25519_encode.S
+                curve25519/edwards25519_decode.S
+                curve25519/bignum_neg_p25519.S
                 )
   elseif(ARCH STREQUAL "aarch64")
     # byte-level interface for aarch64 s2n-bignum curve25519 is in
@@ -236,6 +239,7 @@ if((ARCH STREQUAL "x86_64" OR ARCH STREQUAL "aarch64") AND
                 curve25519/edwards25519_scalarmulbase_alt.S
                 curve25519/edwards25519_scalarmuldouble.S
                 curve25519/edwards25519_scalarmuldouble_alt.S
+                curve25519/edwards25519_encode.S
                 )
   endif()
 endif()

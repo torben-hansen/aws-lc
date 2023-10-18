@@ -136,3 +136,7 @@ extern void edwards25519_scalarmulbase_alt(uint64_t res[static 8],uint64_t scala
 
 extern void edwards25519_scalarmuldouble(uint64_t res[8], uint64_t scalar[4], uint64_t point[8],uint64_t bscalar[4]);
 extern void edwards25519_scalarmuldouble_alt(uint64_t res[8], uint64_t scalar[4], uint64_t point[8],uint64_t bscalar[4]);
+
+extern void edwards25519_encode(uint8_t z[static 32], uint64_t p[static 8]);
+extern uint64_t edwards25519_decode(uint64_t z[static 8],const uint8_t c[static 32]);
+extern void bignum_neg_p25519(uint64_t z[static 4], uint64_t x[static 4]);

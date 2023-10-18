@@ -237,20 +237,6 @@ static void x25519_s2n_bignum_public_from_private(
 #endif
 }
 
-static void ed25519_s2n_bignum_public_key_encode(
-  uint8_t out_public_value[32], const uint64_t uint64_point[8]) {
-
-  // Type convert to public prototype buffer type.
-  OPENSSL_memcpy(out_public_value, &uint64_point[4], 32);
-
-  // Encode parity bit in verification key to compress x-coordinate.
-  // The lexicographical order determines the parity of the F_q field element
-  // which just really collapses to the parity of the encoded field element.
-  // little-endian, so just check the LSB.
-  uint8_t lsb_byte_x = (uint8_t) uint64_point[0];
-  out_public_value[31] ^= ((lsb_byte_x & 1) << 7);
-}
-
 static void ed25519_s2n_bignum_public_from_private(
   uint8_t out_public_value[32], const uint8_t hashed_seed[32]) {
 
@@ -285,22 +271,7 @@ static void ed25519_s2n_bignum_public_from_private(
 
 #endif
 
-  ed25519_s2n_bignum_public_key_encode(out_public_value, uint64_point);
-}
-
-// Basically, the same as ed25519_s2n_bignum_public_key_encode.
-static void ed25519_s2n_bignum_encode_R(
-  uint8_t R[32], const uint64_t uint64_R[8]) {
-
-  // Type convert to public prototype buffer type.
-  OPENSSL_memcpy(R, &uint64_R[4], 32);
-
-  // Encode parity bit in verification key to compress x-coordinate.
-  // The lexicographical order determines the parity of the F_q field element
-  // which just really collapses to the parity of the encoded field element.
-  // little-endian, so just check the LSB.
-  uint8_t lsb_byte_x = (uint8_t) uint64_R[0];
-  R[31] ^= ((lsb_byte_x & 1) << 7);
+  edwards25519_encode(out_public_value, uint64_point);
 }
 
 static void ed25519_s2n_bignum_scalarmult_base_b(uint8_t R[32],
@@ -337,7 +308,7 @@ static void ed25519_s2n_bignum_scalarmult_base_b(uint8_t R[32],
 
 #endif
 
-  ed25519_s2n_bignum_encode_R(R, uint64_R);
+  edwards25519_encode(R, uint64_R);
 }
 
 static void ed25519_s2n_bignum_double_scalarmult(uint8_t R[32],
@@ -376,7 +347,7 @@ static void ed25519_s2n_bignum_double_scalarmult(uint8_t R[32],
 
 #endif
 
-  ed25519_s2n_bignum_encode_R(R, uint64_R);
+  edwards25519_encode(R, uint64_R);
 }
 
 void ED25519_keypair_from_seed(uint8_t out_public_key[32],
@@ -475,7 +446,6 @@ static int ed25519_verify_malleability(uint8_t scopy[32]) {
   return 1;
 }
 
-
 static int ED25519_verify_nohw(const uint8_t *message, size_t message_len,
                    const uint8_t signature[64], const uint8_t public_key[32]) {
   ge_p3 A;
@@ -522,17 +492,6 @@ static int ED25519_verify_nohw(const uint8_t *message, size_t message_len,
 
 static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
                    const uint8_t signature[64], const uint8_t public_key[32]) {
-  ge_p3 A;
-  if ((signature[63] & 224) != 0 ||
-      !x25519_ge_frombytes_vartime(&A, public_key)) {
-    return 0;
-  }
-
-  fe_loose t;
-  fe_neg(&t, &A.X);
-  fe_carry(&A.X, &t);
-  fe_neg(&t, &A.T);
-  fe_carry(&A.T, &t);
 
   uint8_t pkcopy[32];
   OPENSSL_memcpy(pkcopy, public_key, 32);
@@ -541,9 +500,16 @@ static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
   uint8_t scopy[32];
   OPENSSL_memcpy(scopy, signature + 32, 32);
 
-  if (ed25519_verify_malleability(scopy) != 1) {
+  if ((signature[63] & 224) != 0 ||
+    ed25519_verify_malleability(scopy) != 1) {
     return 0;
   }
+
+  uint64_t uint64_point[8] = {0};
+  if (edwards25519_decode(uint64_point, public_key) != 0) {
+    return 0;
+  }
+  bignum_neg_p25519(uint64_point, uint64_point);
 
   SHA512_CTX hash_ctx;
   SHA512_Init(&hash_ctx);
@@ -555,13 +521,10 @@ static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
 
   x25519_sc_reduce(h);
 
-  // First produce encoded point A, but un-compressed!
-  // Then, compute the scalar multiplications and additions in one go
+  // Compute the scalar multiplications and additions in one go
   // using the s2n-bignum function. Output from the wrapped s2n-bignum function
   // is a compressed point, so no need to encode just validate.
-  uint64_t uint64_point[8] = {0};
   uint8_t R[32] = {0};
-  ge_p3_tobytes_no_compression(uint64_point, &A);
   ed25519_s2n_bignum_double_scalarmult(R, h, uint64_point, scopy);
 
   return CRYPTO_memcmp(R, rcopy, sizeof(R)) == 0;
