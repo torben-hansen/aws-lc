@@ -312,20 +312,16 @@ static void ed25519_s2n_bignum_scalarmult_base_b(uint8_t R[32],
 }
 
 static void ed25519_s2n_bignum_double_scalarmult(uint8_t R[32],
-  uint8_t scalar[32], uint64_t point[8], uint8_t bscalar[32]) {
+  uint64_t scalar[4], uint64_t point[8], uint64_t bscalar[4]) {
 
   uint64_t uint64_R[8] = {0};
-  uint64_t uint64_scalar[8] = {0};
-  uint64_t uint64_bscalar[8] = {0};
-  OPENSSL_memcpy(uint64_scalar, scalar, 32);
-  OPENSSL_memcpy(uint64_bscalar, bscalar, 32);
 
 #if defined(OPENSSL_X86_64)
 
   if (x25519_s2n_bignum_no_alt_capable() == 1) {
-    edwards25519_scalarmuldouble(uint64_R, uint64_scalar, point, uint64_bscalar);
+    edwards25519_scalarmuldouble(uint64_R, scalar, point, bscalar);
   } else if (x25519_s2n_bignum_alt_capable() == 1) {
-    edwards25519_scalarmuldouble_alt(uint64_R, uint64_scalar, point, uint64_bscalar);
+    edwards25519_scalarmuldouble_alt(uint64_R, scalar, point, bscalar);
   } else {
     abort();
   }
@@ -333,9 +329,9 @@ static void ed25519_s2n_bignum_double_scalarmult(uint8_t R[32],
 #elif defined(OPENSSL_AARCH64)
 
   if (x25519_s2n_bignum_alt_capable() == 1) {
-    edwards25519_scalarmuldouble_alt(uint64_R, uint64_scalar, point, uint64_bscalar);
+    edwards25519_scalarmuldouble_alt(uint64_R, scalar, point, bscalar);
   } else if (x25519_s2n_bignum_no_alt_capable() == 1) {
-    edwards25519_scalarmuldouble(uint64_R, uint64_scalar, point, uint64_bscalar);
+    edwards25519_scalarmuldouble(uint64_R, scalar, point, bscalar);
   } else {
     abort();
   }
@@ -421,7 +417,7 @@ int ED25519_sign(uint8_t out_sig[64], const uint8_t *message,
   return 1;
 }
 
-static int ed25519_verify_malleability(uint8_t scopy[32]) {
+static inline int ed25519_verify_malleability(uint8_t scopy[32]) {
   // https://tools.ietf.org/html/rfc8032#section-5.1.7 requires that s be in
   // the range [0, order) in order to prevent signature malleability.
 
@@ -520,17 +516,18 @@ static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
   SHA512_Final(h, &hash_ctx);
 
   uint64_t h_reduced[4] = {0};
-  uint64_t h_uint64[8] = {0};
-  OPENSSL_memcpy(h_uint64, h, SHA512_DIGEST_LENGTH);
+  uint64_t h_uint64[8];
+  OPENSSL_STATIC_ASSERT((SHA512_DIGEST_LENGTH / 8) == 8, SHA512_DIGEST_LENGTH_not_8_times_64_bits)
+  memcpy(h_uint64, h, SHA512_DIGEST_LENGTH);
   bignum_mod_n25519(h_reduced, 8, h_uint64);
 
   // Compute the scalar multiplications and additions in one go
   // using the s2n-bignum function. Output from the wrapped s2n-bignum function
   // is a compressed point, so no need to encode just validate.
   uint8_t R[32] = {0};
-  memset(h, 0, SHA512_DIGEST_LENGTH);
-  OPENSSL_memcpy(h, h_reduced, 4*8);
-  ed25519_s2n_bignum_double_scalarmult(R, h, uint64_point, scopy);
+  uint64_t uint64_scopy[4];
+  memcpy(uint64_scopy, scopy, 32);
+  ed25519_s2n_bignum_double_scalarmult(R, h_reduced, uint64_point, uint64_scopy);
 
   return CRYPTO_memcmp(R, rcopy, sizeof(R)) == 0;
 }
