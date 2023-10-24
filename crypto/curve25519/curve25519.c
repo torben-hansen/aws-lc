@@ -519,12 +519,17 @@ static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
   uint8_t h[SHA512_DIGEST_LENGTH];
   SHA512_Final(h, &hash_ctx);
 
-  x25519_sc_reduce(h);
+  uint64_t h_reduced[4] = {0};
+  uint64_t h_uint64[8] = {0};
+  OPENSSL_memcpy(h_uint64, h, SHA512_DIGEST_LENGTH);
+  bignum_mod_n25519(h_reduced, 8, h_uint64);
 
   // Compute the scalar multiplications and additions in one go
   // using the s2n-bignum function. Output from the wrapped s2n-bignum function
   // is a compressed point, so no need to encode just validate.
   uint8_t R[32] = {0};
+  memset(h, 0, SHA512_DIGEST_LENGTH);
+  OPENSSL_memcpy(h, h_reduced, 4*8);
   ed25519_s2n_bignum_double_scalarmult(R, h, uint64_point, scopy);
 
   return CRYPTO_memcmp(R, rcopy, sizeof(R)) == 0;
