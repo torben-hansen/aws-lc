@@ -394,7 +394,12 @@ int ED25519_sign(uint8_t out_sig[64], const uint8_t *message,
   uint8_t nonce[SHA512_DIGEST_LENGTH];
   SHA512_Final(nonce, &hash_ctx);
 
-  x25519_sc_reduce(nonce);
+  uint64_t unint64_t_nonce_reduced[4];
+  uint64_t uint64_nonce[8];
+  OPENSSL_memcpy(uint64_nonce, nonce, SHA512_DIGEST_LENGTH);
+  bignum_mod_n25519(unint64_t_nonce_reduced, 8, uint64_nonce);
+  memset(nonce, 0, SHA512_DIGEST_LENGTH);
+  OPENSSL_memcpy(nonce, unint64_t_nonce_reduced, 4 * 8);
 
   // The final signature, will have the result R in the first 32 octets.
   // Can conveniently put R there straightaway.
@@ -411,8 +416,19 @@ int ED25519_sign(uint8_t out_sig[64], const uint8_t *message,
   uint8_t hram[SHA512_DIGEST_LENGTH];
   SHA512_Final(hram, &hash_ctx);
 
-  x25519_sc_reduce(hram);
-  sc_muladd(out_sig + 32, hram, az, nonce);
+  uint64_t unint64_t_hram_reduced[4];
+  uint64_t uint64_hram[8];
+  OPENSSL_memcpy(uint64_hram, hram, SHA512_DIGEST_LENGTH);
+  bignum_mod_n25519(unint64_t_hram_reduced, 8, uint64_hram);
+  memset(hram, 0, SHA512_DIGEST_LENGTH);
+  OPENSSL_memcpy(hram, unint64_t_hram_reduced, 4 * 8);
+
+  uint64_t uint64_out_sig[4];
+  uint64_t uint64_az[4];
+  OPENSSL_memcpy(uint64_az, az, SHA512_DIGEST_LENGTH);
+  bignum_madd_n25519(uint64_out_sig, unint64_t_hram_reduced, uint64_az,
+    unint64_t_nonce_reduced);
+  OPENSSL_memcpy(out_sig + 32, uint64_out_sig, 4 * 8);
 
   return 1;
 }
@@ -518,7 +534,7 @@ static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
   uint64_t h_reduced[4] = {0};
   uint64_t h_uint64[8];
   OPENSSL_STATIC_ASSERT((SHA512_DIGEST_LENGTH / 8) == 8, SHA512_DIGEST_LENGTH_not_8_times_64_bits)
-  memcpy(h_uint64, h, SHA512_DIGEST_LENGTH);
+  OPENSSL_memcpy(h_uint64, h, SHA512_DIGEST_LENGTH);
   bignum_mod_n25519(h_reduced, 8, h_uint64);
 
   // Compute the scalar multiplications and additions in one go
@@ -526,7 +542,7 @@ static int ED25519_verify_s2n_bignum(const uint8_t *message, size_t message_len,
   // is a compressed point, so no need to encode just validate.
   uint8_t R[32] = {0};
   uint64_t uint64_scopy[4];
-  memcpy(uint64_scopy, scopy, 32);
+  OPENSSL_memcpy(uint64_scopy, scopy, 32);
   ed25519_s2n_bignum_double_scalarmult(R, h_reduced, uint64_point, uint64_scopy);
 
   return CRYPTO_memcmp(R, rcopy, sizeof(R)) == 0;
