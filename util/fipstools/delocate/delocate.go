@@ -566,7 +566,12 @@ func (d *delocation) processAarch64Instruction(statement, instruction *node32) (
 				symbol, offset, _, didChange, symbolIsLocal, _ := d.parseMemRef(arg.up)
 				changed = didChange
 
-				if _, knownSymbol := d.symbols[symbol]; knownSymbol {
+				if strings.HasPrefix(symbol, "BORINGSSL_bcm_text_") {
+					redirector := redirectorName(symbol)
+					d.redirectors[symbol] = redirector
+					symbol = redirector
+					changed = true
+				} else if _, knownSymbol := d.symbols[symbol]; knownSymbol {
 					symbol = localTargetName(symbol)
 					changed = true
 				} else if !symbolIsLocal && !isSynthesized(symbol) {
@@ -2258,8 +2263,7 @@ func localEntryName(name string) string {
 
 func isSynthesized(symbol string) bool {
 	return strings.HasSuffix(symbol, "_bss_get") ||
-		symbol == "OPENSSL_ia32cap_get" ||
-		strings.HasPrefix(symbol, "BORINGSSL_bcm_text_")
+		symbol == "OPENSSL_ia32cap_get"
 }
 
 func redirectorName(symbol string) string {

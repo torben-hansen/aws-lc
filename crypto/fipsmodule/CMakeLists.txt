@@ -248,7 +248,6 @@ if((((ARCH STREQUAL "x86_64") AND NOT MY_ASSEMBLER_IS_TOO_OLD_FOR_AVX) OR
                 )
 
     # Delocater FIPS issue: CryptoAlg-2198
-    if(NOT FIPS)
       list(APPEND S2N_BIGNUM_ASM_SOURCES
                   curve25519/bignum_mod_n25519.S
                   curve25519/bignum_neg_p25519.S
@@ -262,7 +261,6 @@ if((((ARCH STREQUAL "x86_64") AND NOT MY_ASSEMBLER_IS_TOO_OLD_FOR_AVX) OR
                   curve25519/edwards25519_scalarmuldouble.S
                   curve25519/edwards25519_scalarmuldouble_alt.S
                   )
-    endif()
 
 
     # Big integer arithmetics using s2n-bignum

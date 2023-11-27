@@ -74,7 +74,7 @@ OPENSSL_INLINE int curve25519_s2n_bignum_capable(void) {
 
 // Temporarily use separate function for Ed25519. See CryptoAlg-2198.
 OPENSSL_INLINE int ed25519_s2n_bignum_capable(void) {
-#if defined(CURVE25519_S2N_BIGNUM_CAPABLE) && !defined(AWSLC_FIPS)
+#if defined(CURVE25519_S2N_BIGNUM_CAPABLE)
   return 1;
 #else
   return 0;
@@ -84,7 +84,7 @@ OPENSSL_INLINE int ed25519_s2n_bignum_capable(void) {
 // Stub functions if implementations are not compiled.
 // These functions have to abort, otherwise we risk applications assuming they
 // did work without actually doing anything.
-#if !defined(CURVE25519_S2N_BIGNUM_CAPABLE) || defined(BORINGSSL_FIPS)
+#if !defined(CURVE25519_S2N_BIGNUM_CAPABLE)
 
 #define S2N_BIGNUM_STUB_FUNC(return_type, symbol, ...) \
   return_type symbol(__VA_ARGS__); \
