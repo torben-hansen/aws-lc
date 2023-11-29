@@ -264,6 +264,14 @@ err:
 int BORINGSSL_integrity_test(void) {
   const uint8_t *const start = BORINGSSL_bcm_text_start;
   const uint8_t *const end = BORINGSSL_bcm_text_end;
+  const uint8_t *const h = BORINGSSL_bcm_text_hash;
+
+ fprintf(
+      stderr,
+      "BORINGSSL_bcm_text_start = (%p)\n"
+      "BORINGSSL_bcm_text_end = (%p)\n"
+      "BORINGSSL_bcm_text_hash = (%p)\n",
+      start, end, h);
 
   assert_within(start, AES_encrypt, "AES_encrypt", end);
   assert_within(start, RSA_sign, "RSA_sign", end);
