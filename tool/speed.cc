@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -172,6 +173,7 @@ static uint64_t time_now() {
 
 static uint64_t g_timeout_seconds = 1;
 static std::vector<size_t> g_chunk_lengths = {16, 256, 1350, 8192, 16384};
+static std::vector<std::string> g_filters = {""};
 
 static bool TimeFunction(TimeResults *results, std::function<bool()> func) {
   // The first time |func| is called an expensive self check might run that
@@ -1966,7 +1968,8 @@ static const argument_t kArguments[] = {
     {
         "-filter",
         kOptionalArgument,
-        "A filter on the speed tests to run",
+        "A comma-separated list of filters on the speed tests to run. "
+        "Each filter is applied in independent runs.",
     },
     {
         "-timeout",
@@ -1996,6 +1999,51 @@ static const argument_t kArguments[] = {
     },
 };
 
+// parseCommaArgument clears |vector| and parses comma-separated input for the
+// argument |arg_name| in |args_map|.
+static bool parseCommaArgument(std::vector<std::string> &vector,
+  std::map<std::string, std::string> &args_map, const std::string &arg_name) {
+
+  vector.clear();
+  const char *start = args_map[arg_name.c_str()].data();
+  const char *end = start + args_map[arg_name.c_str()].size();
+  const char* current = start;
+  while (current < end) {
+    const char* comma = std::find(current, end, ',');
+    if (comma == current) {
+      // Empty argument found e.g. arg1,arg2,,arg3
+      fprintf(stderr, "Error parsing %s argument\n", arg_name.c_str());
+      return false;
+    }
+    vector.emplace_back(current, comma);
+    current = (comma == end) ? end : comma + 1;
+  }
+
+  return true;
+}
+
+// parseStringVectorToIntegerVector attempts to parse each element of 
+// |in_vector| as a size_t integer and adds the result to |out_vector|. Clears
+// |out_vector|.
+static bool parseStringVectorToIntegerVector(
+  std::vector<std::string> &in_vector, std::vector<size_t> &out_vector) {
+
+  out_vector.clear();
+  for (const std::string &str : in_vector) {
+    errno = 0;
+    char *ptr;
+    unsigned long long int integer_value = strtoull(str.data(), &ptr, 10);
+    if (ptr == str.data() /* no numeric characters found */ ||
+        errno == ERANGE /* overflow */ ||
+        static_cast<size_t>(integer_value) != integer_value) {
+      fprintf(stderr, "Error parsing %s argument\n", str.c_str());
+      return false;
+    }
+    out_vector.push_back(static_cast<size_t>(integer_value));
+  }
+  return true;
+}
+
 bool Speed(const std::vector<std::string> &args) {
   std::map<std::string, std::string> args_map;
   if (!ParseKeyValueArguments(&args_map, args, kArguments)) {
@@ -2003,9 +2051,10 @@ bool Speed(const std::vector<std::string> &args) {
     return false;
   }
 
-  std::string selected;
   if (args_map.count("-filter") != 0) {
-    selected = args_map["-filter"];
+    if (!parseCommaArgument(g_filters, args_map, "-filter")) {
+      return false;
+    }
   }
 
   if (args_map.count("-json") != 0) {
@@ -2017,28 +2066,13 @@ bool Speed(const std::vector<std::string> &args) {
   }
 
   if (args_map.count("-chunks") != 0) {
-    g_chunk_lengths.clear();
-    const char *start = args_map["-chunks"].data();
-    const char *end = start + args_map["-chunks"].size();
-    while (start != end) {
-      errno = 0;
-      char *ptr;
-      unsigned long long val = strtoull(start, &ptr, 10);
-      if (ptr == start /* no numeric characters found */ ||
-          errno == ERANGE /* overflow */ ||
-          static_cast<size_t>(val) != val) {
-        fprintf(stderr, "Error parsing -chunks argument\n");
-        return false;
-      }
-      g_chunk_lengths.push_back(static_cast<size_t>(val));
-      start = ptr;
-      if (start != end) {
-        if (*start != ',') {
-          fprintf(stderr, "Error parsing -chunks argument\n");
-          return false;
-        }
-        start++;
-      }
+    std::vector<std::string> chunkVector;
+    if (!parseCommaArgument(chunkVector,
+        args_map, "-chunks")) {
+      return false;
+    }
+    if (!parseStringVectorToIntegerVector(chunkVector, g_chunk_lengths)) {
+      return false;
     }
   }
 
@@ -2061,6 +2095,8 @@ bool Speed(const std::vector<std::string> &args) {
   if (g_print_json) {
     puts("[");
   }
+
+for (std::string selected : g_filters) {
   if(!SpeedAESBlock("AES-128", 128, selected) ||
      !SpeedAESBlock("AES-192", 192, selected) ||
      !SpeedAESBlock("AES-256", 256, selected) ||
@@ -2152,6 +2188,7 @@ bool Speed(const std::vector<std::string> &args) {
     return false;
   }
 #endif
+} // end filter iteration loop
   if (g_print_json) {
     puts("\n]");
   }
