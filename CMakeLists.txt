@@ -393,8 +393,8 @@ if(GCC OR CLANG)
     set(C_CXX_FLAGS "${C_CXX_FLAGS} -Wformat-signedness")
   endif()
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_CXX_FLAGS} -Wmissing-prototypes -Wold-style-definition -Wstrict-prototypes")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${C_CXX_FLAGS} -Wmissing-declarations")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_CXX_FLAGS} -march=broadwell -Wmissing-prototypes -Wold-style-definition -Wstrict-prototypes")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${C_CXX_FLAGS} -march=broadwell -Wmissing-declarations")
 
   if(NOT MSVC)
     if (NOT CMAKE_CXX_STANDARD)
