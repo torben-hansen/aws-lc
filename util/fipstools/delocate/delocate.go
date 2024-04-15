@@ -1143,6 +1143,7 @@ const (
 	instrMemoryVectorCombine
 	// instrThreeArg merges two sources into a destination in some fashion.
 	instrThreeArg
+	instrFourArg
 	// instrCompare takes two arguments and writes outputs to the flags register.
 	instrCompare
 	instrOther
@@ -1183,6 +1184,11 @@ func classifyInstruction(instr string, args []*node32) instructionType {
 	case "sarxq", "shlxq", "shrxq", "pinsrq":
 		if len(args) == 3 {
 			return instrThreeArg
+		}
+
+	case "vpinsrq":
+		if len(args) == 4 {
+			return instrFourArg
 		}
 
 	case "vpbroadcastq":
@@ -1290,6 +1296,13 @@ func threeArgCombineOp(w stringWriter, instructionName, source1, source2, dest s
 	return func(k func()) {
 		k()
 		w.WriteString("\t" + instructionName + " " + source1 + ", " + source2 + ", " + dest + "\n")
+	}
+}
+
+func fourArgCombineOp(w stringWriter, instructionName, immediate, tempReg, othersource, dest string) wrapperFunc {
+	return func(k func()) {
+		k()
+		w.WriteString("\t" + instructionName + " " + immediate + "," + tempReg + ", " + othersource + ", " + dest + "\n")
 	}
 }
 
@@ -1431,7 +1444,7 @@ Args:
 				}
 
 				classification := classifyInstruction(instructionName, argNodes)
-				if classification != instrThreeArg && classification != instrCompare && i != 0 {
+				if classification != instrFourArg && classification != instrThreeArg && classification != instrCompare && i != 0 {
 					return nil, fmt.Errorf("GOT access must be source operand, %v", classification)
 				}
 
@@ -1511,6 +1524,26 @@ Args:
 					} else {
 						wrappers = append(wrappers, threeArgCombineOp(d.output, instructionName, otherSource, tempReg, targetReg))
 					}
+					targetReg = tempReg
+				// This only works for vpinsrq with an immediate
+				case instrFourArg: 
+					if n := len(argNodes); n != 4 {
+						return nil, fmt.Errorf("four-argument instruction has %d arguments", n)
+					}
+					if i != 1 {
+						return nil, errors.New("GOT access must be from source operand")
+					}
+					targetReg = d.contents(argNodes[3])
+					otherSource := d.contents(argNodes[2])
+					gotsource := d.contents(argNodes[1])
+					immediate := d.contents(argNodes[0])
+
+					saveRegWrapper, tempReg := saveRegister(d.output, []string{targetReg, gotsource})
+					redzoneCleared = true
+					wrappers = append(wrappers, saveRegWrapper)
+					
+					wrappers = append(wrappers, fourArgCombineOp(d.output, instructionName, immediate, tempReg, otherSource, targetReg))
+
 					targetReg = tempReg
 				default:
 					return nil, fmt.Errorf("Cannot rewrite GOTPCREL reference for instruction %q", instructionName)
