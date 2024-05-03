@@ -1214,6 +1214,33 @@ static bool SpeedHmacChunkOneShot(const EVP_MD *md, std::string name,
   }
 
   results.PrintWithBytes(name, chunk_len);
+
+  HMAC_CTX hmac_ctx;
+  HMAC_CTX_init(&hmac_ctx);
+  if (HMAC_Init_ex(&hmac_ctx, key.get(), key_len, md, nullptr) != 1) {
+    return false;
+  }
+  const size_t key_precomputed_len = HMAC_precomputed_key_size(&hmac_ctx);
+  std::unique_ptr<uint8_t[]> key_precomputed(new uint8_t[key_precomputed_len]);
+  size_t key_precomputed_len_out = 0;
+  if (HMAC_set_precomputed_key_export(&hmac_ctx) != 1 ||
+      HMAC_get_precomputed_key(&hmac_ctx, key_precomputed.get(), &key_precomputed_len_out) != 1) {
+    return false;
+  }
+
+  if (!TimeFunction(&results, [&key_precomputed, key_precomputed_len, md, chunk_len, &scratch]() -> bool {
+
+        uint8_t digest[EVP_MAX_MD_SIZE] = {0};
+        unsigned int md_len = EVP_MAX_MD_SIZE;
+
+        return HMAC_with_precompute(md, key_precomputed.get(), key_precomputed_len, scratch, chunk_len, digest, &md_len) != nullptr;
+      })) {
+    fprintf(stderr, "HMAC_Final failed.\n");
+    ERR_print_errors_fp(stderr);
+    return false;
+  }
+
+  results.PrintWithBytes(name + " precompute", chunk_len);
   return true;
 }
 

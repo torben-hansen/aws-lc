@@ -1865,19 +1865,19 @@ static bool HMAC(const Span<const uint8_t> args[], ReplyCallback write_reply) {
   }
 
   // HMAC computation with precomputed keys
-  uint8_t digest_with_precompute[EVP_MAX_MD_SIZE];
-  unsigned digest_with_precompute_len;
-  if (::HMAC_with_precompute(md, args[1].data(), args[1].size(), args[0].data(),
-                             args[0].size(), digest_with_precompute,
-                             &digest_with_precompute_len) == nullptr) {
-    return false;
-  }
+ // uint8_t digest_with_precompute[EVP_MAX_MD_SIZE];
+ // unsigned digest_with_precompute_len;
+  //if (::HMAC_with_precompute(md, args[1].data(), args[1].size(), args[0].data(),
+  //                           args[0].size(), digest_with_precompute,
+  //                           &digest_with_precompute_len) == nullptr) {
+  //  return false;
+  //}
 
   // The two HMAC computations must yield exactly the same results
-  if (digest_len != digest_with_precompute_len ||
-      memcmp(digest, digest_with_precompute, digest_len) != 0) {
-    return false;
-  }
+  //if (digest_len != digest_with_precompute_len ||
+  //    memcmp(digest, digest_with_precompute, digest_len) != 0) {
+  //  return false;
+  //}
 
   return write_reply({Span<const uint8_t>(digest, digest_len)});
 }

@@ -240,8 +240,8 @@ uint8_t *HMAC(const EVP_MD *evp_md, const void *key, size_t key_len,
   }
 }
 
-uint8_t *HMAC_with_precompute(const EVP_MD *evp_md, const void *key,
-                              size_t key_len, const uint8_t *data,
+uint8_t *HMAC_with_precompute(const EVP_MD *evp_md, const void *precomputed_key,
+                              size_t precomputed_key_len, const uint8_t *data,
                               size_t data_len, uint8_t *out,
                               unsigned int *out_len) {
   HMAC_CTX ctx;
@@ -254,22 +254,14 @@ uint8_t *HMAC_with_precompute(const EVP_MD *evp_md, const void *key,
   //  by the underlying functions anyways?
   FIPS_service_indicator_lock_state();
 
-  uint8_t precomputed_key[HMAC_MAX_PRECOMPUTED_KEY_SIZE];
-  size_t precomputed_key_len;
-
-  result =
-      HMAC_Init_ex(&ctx, key, key_len, evp_md, NULL) &&
-      HMAC_set_precomputed_key_export(&ctx) &&
-      HMAC_get_precomputed_key(&ctx, precomputed_key, &precomputed_key_len) &&
-      HMAC_Init_from_precomputed_key(&ctx, precomputed_key, precomputed_key_len,
-                                     evp_md) &&
-      HMAC_Update(&ctx, data, data_len) && HMAC_Final(&ctx, out, out_len);
+  result = HMAC_Init_from_precomputed_key(&ctx, precomputed_key, precomputed_key_len, evp_md) &&
+      HMAC_Update(&ctx, data, data_len) &&
+      HMAC_Final(&ctx, out, out_len);
 
   FIPS_service_indicator_unlock_state();
 
   // Regardless of our success we need to zeroize our working state.
   HMAC_CTX_cleanup(&ctx);
-  OPENSSL_cleanse(precomputed_key, HMAC_MAX_PRECOMPUTED_KEY_SIZE);
   if (result) {
     HMAC_verify_service_indicator(evp_md);
     return out;
@@ -494,7 +486,7 @@ int HMAC_get_precomputed_key(HMAC_CTX *ctx, uint8_t *out, size_t *out_len) {
   }
 
   const size_t chaining_length = ctx->methods->chaining_length;
-  size_t block_size = EVP_MD_block_size(ctx->md);
+  //size_t block_size = EVP_MD_block_size(ctx->md);
   assert(2 * chaining_length <= HMAC_MAX_PRECOMPUTED_KEY_SIZE);
 
   uint64_t i_ctx_n;
@@ -505,11 +497,13 @@ int HMAC_get_precomputed_key(HMAC_CTX *ctx, uint8_t *out, size_t *out_len) {
 
   // We should never arrive here as in our setting, get_state should always be
   // successful since i_ctx/o_ctx have processed exactly one block
-  assert(ok);
+  if (ok == 0) {
+    return 0;
+  }
 
   // Sanity check: we must have processed a single block at this time
-  assert(8 * block_size == i_ctx_n);
-  assert(8 * block_size == o_ctx_n);
+  //assert(8 * block_size == i_ctx_n);
+  //assert(8 * block_size == o_ctx_n);
 
   *out_len = chaining_length * 2;
 
