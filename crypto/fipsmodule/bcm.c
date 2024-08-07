@@ -34,6 +34,11 @@
 #pragma bss_seg(".fipsbs$b")
 #endif
 
+#include "rand/new_rand.c"
+#define NEW_RAND_UNPREFIX
+#include "rand/new_rand_prefix.h"
+#undef NEW_RAND_UNPREFIX
+
 #include <openssl/digest.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>

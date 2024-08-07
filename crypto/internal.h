@@ -720,6 +720,7 @@ typedef enum {
   AWSLC_THREAD_LOCAL_FIPS_SERVICE_INDICATOR_STATE,
   OPENSSL_THREAD_LOCAL_TEST,
   NUM_OPENSSL_THREAD_LOCALS,
+  OPENSSL_THREAD_LOCAL_PRIVATE_RAND,
 } thread_local_data_t;
 
 // thread_local_destructor_t is the type of a destructor function that will be
