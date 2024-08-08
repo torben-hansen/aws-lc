@@ -6,8 +6,12 @@
 extern "C" {
 #endif
 
-#define RAND_NO_USER_ADDITIONAL_DATA 0
-#define RAND_USE_USER_ADDITIONAL_DATA 1
+// kCtrDrbgReseedInterval is the number of generate calls made to CTR-DRBG
+// before reseeding.
+static const uint64_t kCtrDrbgReseedInterval = 4096;
+
+#define RAND_NO_USER_PRED_RESISTANCE 0
+#define RAND_USE_USER_PRED_RESISTANCE 1
 
 #define RAND_PRED_RESISTANCE_LEN 32
 

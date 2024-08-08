@@ -14,7 +14,7 @@
 //// ../../ube/ube.c
 /////////////////////
 
-static int ube_ensure_good_state(void) {
+static int rand_ensure_valid_state(void) {
   return 1;
 }
 
@@ -68,9 +68,9 @@ struct rand_thread_local_state {
   // Thread-local CTR-DRBG state. UBE volatile memory.
   CTR_DRBG_STATE drbg;
 
-  // generate_calls is the number of generate calls made on |drbg| since it was
-  // last (re)seeded. Must be bounded by |kReseedInterval|.
-  uint32_t generate_calls;
+  // generate_calls_since_seed is the number of generate calls made on |drbg|
+  // since it was last (re)seeded. Must be bounded by |kReseedInterval|.
+  uint64_t generate_calls_since_seed;
 
   // Entropy source. UBE volatile memory.
   // Make flat.
@@ -101,13 +101,13 @@ static struct rand_thread_local_state * rand_initialise_thread_local_state(void)
   return state;
 }
 
-static int rand_is_reseed_required(void) {
-  // reseed interval
-  // UBE
+static int rand_ensure_uniquness(struct rand_thread_local_state *state,
+  size_t out_len) {
+  // For UBE.
   return 0;
 }
 
-static void rand_do_reseed(void) {
+static void rand_do_reseed(struct rand_thread_local_state *state) {
 
 }
 
@@ -137,9 +137,9 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
     state = rand_initialise_thread_local_state();
   }
 
-  // STEP - reseed conditions
-  if (rand_is_reseed_required() == 1) {
-    rand_do_reseed();
+  // STEP - uniqueness
+  if (rand_ensure_uniquness(state, out_len) == 1) {
+    rand_do_reseed(state);
   }
 
   // STEP - prediction resistance
@@ -158,7 +158,7 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
   // Add caller prediction resistance data, if any.
   if (use_user_pred_resistance == RAND_USE_USER_PRED_RESISTANCE) {
     for (size_t i = 0; i < RAND_PRED_RESISTANCE_LEN; i++) {
-      prediction_resistance[i] ^= user_pred_resistance[i];
+      pred_resistance[i] ^= user_pred_resistance[i];
     }
     first_pred_resistance_len = RAND_PRED_RESISTANCE_LEN;
   }
@@ -170,6 +170,19 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
       todo = CTR_DRBG_MAX_GENERATE_LENGTH;
     }
 
+    // Each reseed interval can generate up to
+    // |CTR_DRBG_MAX_GENERATE_LENGTH*2^{kCtrDrbgReseedInterval}| bytes.
+    // Determining the time(s) to reseed prior to entering the CTR-DRBG generate
+    // loop is a doable strategy. But tracking reseed times add unnecessary
+    // complexity. Instead our strategy is optimizing for simplicity.
+    // |out_len < CTR_DRBG_MAX_GENERATE_LENGTH| will be the majority case
+    // (by far) and requires a single check in either strategy.
+    // Note if we reseeded through |rand_is_reseed_required()| no reseed will
+    // happen here.
+    if( state->generate_calls_since_seed + 1 >= kCtrDrbgReseedInterval) {
+      rand_do_reseed(state);
+    }
+
     if (!CTR_DRBG_generate(&state->drbg, out, todo, pred_resistance,
           first_pred_resistance_len)) {
       abort();
@@ -177,9 +190,7 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
 
     out += todo;
     out_len -= todo;
-    // Though we only check before entering the loop, this cannot add enough to
-    // overflow a |size_t|.
-    state->generate_calls++;
+    state->generate_calls_since_seed++;
     first_pred_resistance_len = 0;
   }
 
@@ -193,7 +204,7 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
   // used) while this function was executing. This is an invalid snapshot
   // and is not safe for use. Please ensure all processing is completed
   // prior to collecting a snapshot.
-  if (ube_ensure_good_state() != 1) {
+  if (rand_ensure_valid_state() != 1) {
     abort();
   }
 }
@@ -202,20 +213,20 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
 int RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
   const uint8_t user_pred_resistance[RAND_PRED_RESISTANCE_LEN]) {
   
-  RAND_bytes_core(out, out_len, user_pred_resistance, RAND_PRED_RESISTANCE_LEN);
+  RAND_bytes_core(out, out_len, user_pred_resistance, RAND_USE_USER_PRED_RESISTANCE);
   return 1;
 }
 
 int RAND_bytes_with_user_prediction_resistance(uint8_t *out, size_t out_len,
   const uint8_t user_pred_resistance[RAND_PRED_RESISTANCE_LEN]) {
   
-  RAND_bytes_core(out, out_len, user_pred_resistance, RAND_PRED_RESISTANCE_LEN);
+  RAND_bytes_core(out, out_len, user_pred_resistance, RAND_USE_USER_PRED_RESISTANCE);
   return 1;
 }
 
 int RAND_bytes(uint8_t *out, size_t out_len) {
   static const uint8_t kZeroPredResistance[RAND_PRED_RESISTANCE_LEN] = {0};
-  RAND_bytes_core(out, out_len, kZeroPredResistance, RAND_PRED_RESISTANCE_LEN);
+  RAND_bytes_core(out, out_len, kZeroPredResistance, RAND_NO_USER_PRED_RESISTANCE);
   return 1;
 }
 
@@ -224,5 +235,5 @@ int RAND_priv_bytes(uint8_t *out, size_t out_len) {
 }
 
 int RAND_pseudo_bytes(uint8_t *out, size_t out_len) {
-  return RAND_bytes(buf, len);
+  return RAND_bytes(out, out_len);
 }
