@@ -24,13 +24,12 @@ static int rand_ensure_valid_state(void) {
 
 // I could make these array types!
 struct entropy_source {
+  int is_initialized;
   int (*initialize)(void);
   int (*cleanup)(void);
-  int (*seed)(uint8_t *seed, size_t seed_len);
-  int (*personalization_string)(uint8_t *personalization_string,
-    size_t personalization_string_len);
-  int (*prediction_resistance)(
-    uint8_t pred_resistance[RAND_PRED_RESISTANCE_LEN], size_t pred_res_len);
+  int (*seed)(uint8_t seed[CTR_DRBG_ENTROPY_LEN]);
+  int (*personalization_string)(uint8_t personalization_string[CTR_DRBG_ENTROPY_LEN]);
+  int (*prediction_resistance)(uint8_t pred_resistance[RAND_PRED_RESISTANCE_LEN]);
   int (*randomize)(void);
 };
 
@@ -38,16 +37,17 @@ static int fake_void(void) {
   return 1;
 }
 
-static int fake_rand(uint8_t *a, size_t b) {
+static int fake_rand(uint8_t a[CTR_DRBG_ENTROPY_LEN]) {
   return 1;
 }
 
-static int fake_rand_array_32(uint8_t a[RAND_PRED_RESISTANCE_LEN], size_t b) {
+static int fake_rand_array_32(uint8_t a[RAND_PRED_RESISTANCE_LEN]) {
   return 1;
 }
 
 static struct entropy_source * get_entropy_source(void) {
   struct entropy_source *entropy_source = OPENSSL_malloc(sizeof(entropy_source));
+  entropy_source->is_initialized = 1;
   entropy_source->initialize = fake_void;
   entropy_source->cleanup = fake_void;
   entropy_source->seed = fake_rand;
@@ -61,7 +61,6 @@ static struct entropy_source * get_entropy_source(void) {
 /////////////////////
 //// rand.c
 /////////////////////
-
 
 // rand_thread_state contains the per-thread state for the RNG.
 struct rand_thread_local_state {
@@ -89,73 +88,114 @@ static void rand_thread_local_state_free(void *state_in) {
   OPENSSL_free(state);
 }
 
-static struct rand_thread_local_state * rand_initialise_thread_local_state(void) {
-  struct rand_thread_local_state *state = OPENSSL_zalloc(sizeof(struct rand_thread_local_state));
-  if (state == NULL ||
-      CRYPTO_set_thread_local(OPENSSL_THREAD_LOCAL_PRIVATE_RAND, state,
-                                 rand_thread_local_state_free) != 1) {
+static int rand_ensure_ctr_drbg_uniquness(struct rand_thread_local_state *state,
+  size_t out_len) {
+  // TODO
+  // For UBE.
+  return 1;
+}
+
+
+static void rand_maybe_get_ctr_drbg_pred_resistance(
+  struct rand_thread_local_state *state,
+  uint8_t pred_resistance[RAND_PRED_RESISTANCE_LEN],
+  size_t *pred_resistance_len) {
+
+  *pred_resistance_len = 0;
+
+  if (state->entropy_source->prediction_resistance != NULL) {
+    state->entropy_source->prediction_resistance(pred_resistance);
+    *pred_resistance_len = RAND_PRED_RESISTANCE_LEN;
+  }
+}
+
+static void rand_get_ctr_drbg_seed_entropy(struct entropy_source *entropy_source,
+  uint8_t seed[CTR_DRBG_ENTROPY_LEN],
+  uint8_t personalization_string[CTR_DRBG_ENTROPY_LEN],
+  size_t *personalization_string_len) {
+
+  *personalization_string_len = 0;
+
+  if (entropy_source == NULL || entropy_source->is_initialized == 0) {
     abort();
   }
 
+  if (entropy_source->seed(seed) != 1) {
+    abort();
+  }
+
+  if (entropy_source->personalization_string != NULL) {
+    if(entropy_source->personalization_string(personalization_string) != 1) {
+      abort();
+    }
+    *personalization_string_len = CTR_DRBG_ENTROPY_LEN;
+  }
+}
+
+static void rand_ctr_drbg_reseed(struct rand_thread_local_state *state) {
+
+  uint8_t seed[CTR_DRBG_ENTROPY_LEN];
+  uint8_t personalization_string[CTR_DRBG_ENTROPY_LEN];
+  size_t personalization_string_len = 0;
+  rand_get_ctr_drbg_seed_entropy(state->entropy_source, seed,
+    personalization_string, &personalization_string_len);
+
+  assert(*personalization_string_len == 0 ||
+         *personalization_string_len == CTR_DRBG_ENTROPY_LEN);
+
+  if (CTR_DRBG_reseed(&state->drbg, seed, personalization_string,
+        personalization_string_len) != 1) {
+    abort();
+  }
+
+  state->generate_calls_since_seed = 0;
+
+  OPENSSL_cleanse(seed, CTR_DRBG_ENTROPY_LEN);
+  OPENSSL_cleanse(personalization_string, CTR_DRBG_ENTROPY_LEN);
+}
+
+static void rand_state_initialize(struct rand_thread_local_state *state) {
+
   state->entropy_source = get_entropy_source();
-  return state;
+
+  uint8_t seed[CTR_DRBG_ENTROPY_LEN];
+  uint8_t personalization_string[CTR_DRBG_ENTROPY_LEN];
+  size_t personalization_string_len = 0;
+  rand_get_ctr_drbg_seed_entropy(state->entropy_source, seed,
+    personalization_string, &personalization_string_len);
+
+  assert(*personalization_string_len == 0 ||
+         *personalization_string_len == CTR_DRBG_ENTROPY_LEN);
+
+  if (!CTR_DRBG_init(&state->drbg, seed, personalization_string,
+        personalization_string_len)) {
+    abort();
+  }
+
+  state->generate_calls_since_seed = 0;
+
+  OPENSSL_cleanse(seed, CTR_DRBG_ENTROPY_LEN);
+  OPENSSL_cleanse(personalization_string, CTR_DRBG_ENTROPY_LEN);
 }
 
-static int rand_ensure_uniquness(struct rand_thread_local_state *state,
-  size_t out_len) {
-  // For UBE.
-  return 0;
-}
-
-static void rand_do_reseed(struct rand_thread_local_state *state) {
-
-}
-
-static int rand_is_prediction_resistance_available(void) {
-  return 0;
-}
-
-static void rand_get_prediction_resistance(
-  uint8_t pred_resistance[RAND_PRED_RESISTANCE_LEN]) {
-  
-  OPENSSL_cleanse(pred_resistance, RAND_PRED_RESISTANCE_LEN);
-}
-
-static void RAND_bytes_core(uint8_t *out, size_t out_len,
+static void RAND_bytes_core(
+  struct rand_thread_local_state *state,
+  uint8_t *out, size_t out_len,
   const uint8_t user_pred_resistance[RAND_PRED_RESISTANCE_LEN],
   int use_user_pred_resistance) {
 
-  if (out_len == 0) {
-    return;
+  // Ensure CTR-DRBG state is unique.
+  if (rand_ensure_ctr_drbg_uniquness(state, out_len) != 1) {
+    rand_ctr_drbg_reseed(state);
   }
 
-  struct rand_thread_local_state *state =
-      CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_PRIVATE_RAND);
-
-  // STEP - initialise
-  if (state == NULL) {
-    state = rand_initialise_thread_local_state();
-  }
-
-  // STEP - uniqueness
-  if (rand_ensure_uniquness(state, out_len) == 1) {
-    rand_do_reseed(state);
-  }
-
-  // STEP - prediction resistance
-  // reference to where it states that prediction resistance should only be
-  // included in first generation.
-  // We could call CTR_DRBG_reseed here. But it induces extra copying work, that
-  // is not necessary. Simply prepare prediction resistance and use as input in
-  // CTR_DRBG_generate that doesn't have extra work.
+  // If a prediction resistance source is available, get it.
   size_t first_pred_resistance_len = 0;
   uint8_t pred_resistance[RAND_PRED_RESISTANCE_LEN] = {0};
-  if (rand_is_prediction_resistance_available() == 1) {
-    rand_get_prediction_resistance(pred_resistance);
-    first_pred_resistance_len = RAND_PRED_RESISTANCE_LEN;
-  }
+  rand_maybe_get_ctr_drbg_pred_resistance(state, pred_resistance,
+    &first_pred_resistance_len);
 
-  // Add caller prediction resistance data, if any.
+  // If caller input user-controlled prediction resistance, use it.
   if (use_user_pred_resistance == RAND_USE_USER_PRED_RESISTANCE) {
     for (size_t i = 0; i < RAND_PRED_RESISTANCE_LEN; i++) {
       pred_resistance[i] ^= user_pred_resistance[i];
@@ -163,7 +203,10 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
     first_pred_resistance_len = RAND_PRED_RESISTANCE_LEN;
   }
 
-  // STEP - generate randomness
+  assert(*first_pred_resistance_len == 0 ||
+         *first_pred_resistance_len == RAND_PRED_RESISTANCE_LEN);
+
+  // Iterate CTR-DRBG generate until we generated |out_len| bytes of randomness.
   while (out_len > 0) {
     size_t todo = out_len;
     if (todo > CTR_DRBG_MAX_GENERATE_LENGTH) {
@@ -180,7 +223,7 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
     // Note if we reseeded through |rand_is_reseed_required()| no reseed will
     // happen here.
     if( state->generate_calls_since_seed + 1 >= kCtrDrbgReseedInterval) {
-      rand_do_reseed(state);
+      rand_ctr_drbg_reseed(state);
     }
 
     if (!CTR_DRBG_generate(&state->drbg, out, todo, pred_resistance,
@@ -194,7 +237,6 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
     first_pred_resistance_len = 0;
   }
 
-  // STEP - finalise
   OPENSSL_cleanse(pred_resistance, RAND_PRED_RESISTANCE_LEN);
 
   // reword this
@@ -209,24 +251,55 @@ static void RAND_bytes_core(uint8_t *out, size_t out_len,
   }
 }
 
+static void RAND_bytes_private(uint8_t *out, size_t out_len,
+  const uint8_t user_pred_resistance[RAND_PRED_RESISTANCE_LEN],
+  int use_user_pred_resistance) {
+
+  if (out_len == 0) {
+    return;
+  }
+
+  struct rand_thread_local_state *state =
+      CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_PRIVATE_RAND);
+
+  if (state == NULL) {
+    state = OPENSSL_zalloc(sizeof(struct rand_thread_local_state));
+    if (state == NULL ||
+        CRYPTO_set_thread_local(OPENSSL_THREAD_LOCAL_PRIVATE_RAND, state,
+                                   rand_thread_local_state_free) != 1) {
+      abort();
+    }
+
+    rand_state_initialize(state);
+  }
+
+  RAND_bytes_core(state, out, out_len, user_pred_resistance,
+    use_user_pred_resistance);
+}
+
+// TOOD
 // Retire and replace call sites with RAND_bytes_with_user_prediction_resistance
 int RAND_bytes_with_additional_data(uint8_t *out, size_t out_len,
   const uint8_t user_pred_resistance[RAND_PRED_RESISTANCE_LEN]) {
   
-  RAND_bytes_core(out, out_len, user_pred_resistance, RAND_USE_USER_PRED_RESISTANCE);
+  RAND_bytes_private(out, out_len, user_pred_resistance,
+    RAND_USE_USER_PRED_RESISTANCE);
   return 1;
 }
 
 int RAND_bytes_with_user_prediction_resistance(uint8_t *out, size_t out_len,
   const uint8_t user_pred_resistance[RAND_PRED_RESISTANCE_LEN]) {
   
-  RAND_bytes_core(out, out_len, user_pred_resistance, RAND_USE_USER_PRED_RESISTANCE);
+  RAND_bytes_private(out, out_len, user_pred_resistance,
+    RAND_USE_USER_PRED_RESISTANCE);
   return 1;
 }
 
 int RAND_bytes(uint8_t *out, size_t out_len) {
+
   static const uint8_t kZeroPredResistance[RAND_PRED_RESISTANCE_LEN] = {0};
-  RAND_bytes_core(out, out_len, kZeroPredResistance, RAND_NO_USER_PRED_RESISTANCE);
+  RAND_bytes_private(out, out_len, kZeroPredResistance,
+    RAND_NO_USER_PRED_RESISTANCE);
   return 1;
 }
 
