@@ -45,8 +45,7 @@ static int fake_rand_array_32(uint8_t a[RAND_PRED_RESISTANCE_LEN]) {
   return 1;
 }
 
-static struct entropy_source * get_entropy_source(void) {
-  struct entropy_source *entropy_source = OPENSSL_malloc(sizeof(entropy_source));
+static void get_entropy_source(struct entropy_source *entropy_source) {
   entropy_source->is_initialized = 1;
   entropy_source->initialize = fake_void;
   entropy_source->cleanup = fake_void;
@@ -54,8 +53,6 @@ static struct entropy_source * get_entropy_source(void) {
   entropy_source->personalization_string = fake_rand;
   entropy_source->prediction_resistance = fake_rand_array_32;
   entropy_source->randomize = fake_void;
-
-  return entropy_source;
 }
 
 /////////////////////
@@ -72,8 +69,7 @@ struct rand_thread_local_state {
   uint64_t generate_calls_since_seed;
 
   // Entropy source. UBE volatile memory.
-  // Make flat.
-  struct entropy_source *entropy_source;
+  struct entropy_source entropy_source;
 };
 
 // rand_thread_local_state frees a |rand_thread_local_state|. This is called when a
@@ -103,8 +99,8 @@ static void rand_maybe_get_ctr_drbg_pred_resistance(
 
   *pred_resistance_len = 0;
 
-  if (state->entropy_source->prediction_resistance != NULL) {
-    state->entropy_source->prediction_resistance(pred_resistance);
+  if (state->entropy_source.prediction_resistance != NULL) {
+    state->entropy_source.prediction_resistance(pred_resistance);
     *pred_resistance_len = RAND_PRED_RESISTANCE_LEN;
   }
 }
@@ -137,7 +133,7 @@ static void rand_ctr_drbg_reseed(struct rand_thread_local_state *state) {
   uint8_t seed[CTR_DRBG_ENTROPY_LEN];
   uint8_t personalization_string[CTR_DRBG_ENTROPY_LEN];
   size_t personalization_string_len = 0;
-  rand_get_ctr_drbg_seed_entropy(state->entropy_source, seed,
+  rand_get_ctr_drbg_seed_entropy(&state->entropy_source, seed,
     personalization_string, &personalization_string_len);
 
   assert(*personalization_string_len == 0 ||
@@ -156,12 +152,12 @@ static void rand_ctr_drbg_reseed(struct rand_thread_local_state *state) {
 
 static void rand_state_initialize(struct rand_thread_local_state *state) {
 
-  state->entropy_source = get_entropy_source();
+  get_entropy_source(&state->entropy_source);
 
   uint8_t seed[CTR_DRBG_ENTROPY_LEN];
   uint8_t personalization_string[CTR_DRBG_ENTROPY_LEN];
   size_t personalization_string_len = 0;
-  rand_get_ctr_drbg_seed_entropy(state->entropy_source, seed,
+  rand_get_ctr_drbg_seed_entropy(&state->entropy_source, seed,
     personalization_string, &personalization_string_len);
 
   assert(*personalization_string_len == 0 ||
