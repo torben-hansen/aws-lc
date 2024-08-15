@@ -168,6 +168,7 @@ static void RAND_bytes_core(
   int use_user_pred_resistance) {
 
   // Ensure CTR-DRBG state is unique.
+  int no_uniqueness_guarantee = 0;
   if (rand_ensure_ctr_drbg_uniquness(state, out_len) != 1) {
     rand_ctr_drbg_reseed(state);
   }
@@ -186,6 +187,14 @@ static void RAND_bytes_core(
       pred_resistance[i] ^= user_pred_resistance[i];
     }
     first_pred_resistance_len = RAND_PRED_RESISTANCE_LEN;
+  }
+
+  // add something here that if uniqueness tools are not available or not
+  // enabled when we expect them to, then fall back to another method for
+  // prediction resistance... which probably means, just use OS randomness
+  // no matter what...
+  if (no_uniqueness_guarantee != 0 && first_pred_resistance_len == 0) {
+    // some other function that can get prediction resistance, for sure.
   }
 
   assert(first_pred_resistance_len == 0 ||
