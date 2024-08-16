@@ -10,6 +10,19 @@ extern "C" {
 
 #include <openssl/base.h>
 
+// get_ube_generation_number returns the generation number for the current
+// thread in |current_generation_number| if supported. The per-thread generation
+// number is a non-zero, strictly-monotonic counter with the following property:
+// if queried in a thread and then subsequently queried, after an UBE occurred,
+// the thread will observe a greater value.
+//
+// This function should be used to protect volatile memory. First cache a
+// generation number associated to the volatile memory at
+// creation/initialization time. Before using the volatile memory check whether
+// the generation number has changed.
+//
+// Returns 1 on success and 0 if not supported. 0 means that UBE detection is
+// not supported and any volatile state must randomize before usage.
 OPENSSL_EXPORT int get_ube_generation_number(uint64_t *current_generation_number);
 
 #if defined(__cplusplus)
