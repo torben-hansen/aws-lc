@@ -8,7 +8,9 @@
 extern "C" {
 #endif
 
-OPENSSL_EXPORT uint64_t get_ube_generation_number(void);
+#include <openssl/base.h>
+
+OPENSSL_EXPORT int get_ube_generation_number(uint64_t *current_generation_number);
 
 #if defined(__cplusplus)
 }  // extern C

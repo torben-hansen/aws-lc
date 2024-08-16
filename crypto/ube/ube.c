@@ -4,14 +4,9 @@
 #include <openssl/base.h>
 
 #include "internal.h"
+#include "../internal.h"
 
-// Choosing a uint8_t-type is deliberate. It means that mutations of
-// |ube_methods_unavailable| will most likely be atomic and therefore lock-free.
-// A stronger case for not needing locks is that |ube_methods_unavailable| is
-// only ever mutated once, from 0 to 1, and only by |ube_failed()|.
-
-
-// PROBABLY drop the above and just add locks....
+static CRYPTO_once_t ube_methods_unavailable_once = CRYPTO_ONCE_INIT; 
 static uint8_t ube_methods_unavailable = 0;
 
 struct ube_thread_local_state {
@@ -20,36 +15,61 @@ struct ube_thread_local_state {
   uint64_t cached_snapsafe_gn;
 };
 
-static int ube_state_initialize(struct ube_thread_local_state *state) {
+static int get_snapsafe_generation_number_local(uint64_t *gn) {
+  *gn = 1;
+  return 1;
+}
 
-  GUARD_PTR(state);
+static uint64_t get_fork_generation_number_local(void) {
+  return 1;
+}
 
-  state->generation_number = 0;
-  state->cached_fork_gn = get_fork_generation_number();
+static void ube_thread_local_state_free(void *ube_state_in) {
+
+  struct ube_thread_local_state *ube_state = ube_state_in;
+  if (ube_state == NULL) {
+    return;
+  }
+
+  OPENSSL_free(ube_state);
+}
+
+static int ube_state_initialize(struct ube_thread_local_state *ube_state) {
+
+  GUARD_PTR(ube_state);
+
+  ube_state->generation_number = 0;
+  ube_state->cached_fork_gn = get_fork_generation_number_local();
   int ret_snapsafe_gn =
-    get_snapsafe_generation_number(&state->cached_snapsafe_gn);
+    get_snapsafe_generation_number_local(&ube_state->cached_snapsafe_gn);
 
-  if (state->cached_fork_gn == 0 ||
+  if (ube_state->cached_fork_gn == 0 ||
       ret_snapsafe_gn == 0) {
     return 0;
   }
   return 1;
 }
 
-// Single mutation point of |ube_methods_unavailable|. Sets the variable to 1 (true).
-static void ube_failed(void) {
+// Single mutation point of |ube_methods_unavailable|. Sets the variable to
+// 1 (true).
+static void set_ube_methods_unavailable_once(void) {
   ube_methods_unavailable = 1;
+}
+
+// ube_failed handles the failure path.
+static void ube_failed(void) {
+  CRYPTO_once(&ube_methods_unavailable_once, set_ube_methods_unavailable_once);
 }
 
 static int ube_update_state(
   struct ube_thread_local_state *ube_state, uint64_t current_fork_gn,
   uint64_t current_snapsafe_gn) {
 
-  GUARD_PTR(state);
+  GUARD_PTR(ube_state);
 
-  state->generation_number += 1;
-  state->cached_fork_gn = current_fork_gn;
-  state->cached_snapsafe_gn = current_snapsafe_gn;
+  ube_state->generation_number += 1;
+  ube_state->cached_fork_gn = current_fork_gn;
+  ube_state->cached_snapsafe_gn = current_snapsafe_gn;
 
   return 1;
 }
@@ -61,7 +81,7 @@ int get_ube_generation_number(uint64_t *current_generation_number) {
   int ret = 0;
   *current_generation_number = 0;
 
-  // If something failed at an earlier point. Just fail immediately. 
+  // If something failed at an earlier point short-circuit immediately. 
   if (ube_methods_unavailable == 1) {
     return 0;
   }
@@ -86,20 +106,20 @@ int get_ube_generation_number(uint64_t *current_generation_number) {
     // Initialization only happens on first entry, in a thread, and at that
     // point the associated volatile memory just needs a generation number to
     // cache.
-    *current_generation_number = state.generation_number;
+    *current_generation_number = ube_state->generation_number;
     return 1;
   }
 
   // Make sure we cache all new generation numbers. Otherwise, we might detect
   // a fork UBE but, in fact, both a fork and snapsafe UBE occurred. Then next
-  // time we enter, we will reseed redundantly.
-  uint64_t current_fork_gn = get_fork_generation_number();
+  // time we enter a redundant reseed will be emitted.
+  uint64_t current_fork_gn = get_fork_generation_number_local();
   uint64_t current_snapsafe_gn = 0;
   int ret_snapsafe_gn =
-    get_snapsafe_generation_number(&current_snapsafe_gn);
+    get_snapsafe_generation_number_local(&current_snapsafe_gn);
 
   if (current_fork_gn == 0 ||
-      ret_snapsafe_gn) {
+      ret_snapsafe_gn == 0) {
     goto end;
   }
 
