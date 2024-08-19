@@ -10,6 +10,8 @@ extern "C" {
 
 #include <openssl/base.h>
 
+// NOT CORRECT ANYMORE...
+//
 // get_ube_generation_number returns the generation number for the current
 // thread in |current_generation_number| if supported. The per-thread generation
 // number is a non-zero, strictly-monotonic counter with the following property:
@@ -24,6 +26,12 @@ extern "C" {
 // Returns 1 on success and 0 if not supported. 0 means that UBE detection is
 // not supported and any volatile state must randomize before usage.
 OPENSSL_EXPORT int get_ube_generation_number(uint64_t *current_generation_number);
+
+// TODO
+// Temporary overrides. Replace with something better. Used atm to test
+// implementation during development.
+OPENSSL_EXPORT void set_fork_generation_number_FOR_TESTING(uint64_t fork_gn);
+OPENSSL_EXPORT void set_snapsafe_generation_number_FOR_TESTING(uint64_t snapsafe_gn);
 
 #if defined(__cplusplus)
 }  // extern C
