@@ -6,6 +6,36 @@
 #include "internal.h"
 #include "../internal.h"
 
+// What is an "UBE"?
+// AWS-LC manages state that must be unique on each usage. For example, the
+// CTR-DRBG state must be unique on each usage, otherwise the generation
+// function will produce duplicated values. We name such state "volatile state"
+// or "volatile memory" if referring directly to memory. Before using a volatile
+// state, we must make sure to randomize it to preserve its uniqueness.
+//
+// When/how to randomize state depends on the context. For example, the CTR-DRBG
+// state, that is managed by AWS-LC, will randomize itself before usage during
+// normal operation. But there are events where this assumption is violated. We
+// call such events "uniqueness breaking events" (UBE). Forking an address space
+// is an example of an UBE.
+//
+// By detecting UBE's we can ensure that volatile state is properly randomized.
+// AWS-LC is currently able to detect two different type of UBE's that would
+// violate usage requirements of a volatile state. The two UBE types are:
+// Forking and VM resuming. Note, however, that detection methods rely on
+// technology that is unique to a platform. Hence, support for UBE detection
+// also depends on the platform AWS-LC is executed on.
+//
+// This file implements and manages the general machinery to detect an UBE. This
+// should be used by the rest of the code-base to implement proper randomization
+// of volatile states before usage.
+
+static CRYPTO_once_t ube_state_initialize_once = CRYPTO_ONCE_INIT;
+static CRYPTO_once_t ube_detection_unavailable_once = CRYPTO_ONCE_INIT;
+static struct CRYPTO_STATIC_MUTEX ube_lock = CRYPTO_STATIC_MUTEX_INIT;
+static uint8_t ube_detection_unavailable = 0;
+
+
 // TODO
 // Temporary overrides to test detection code flow.
 static uint64_t testing_fork_generation_number = 0; 
@@ -35,34 +65,6 @@ static uint64_t get_fork_generation_number_mocked(void) {
   return 1;
 }
 
-// What is an "UBE"?
-// AWS-LC manages state that must be unique on each usage. For example, the
-// CTR-DRBG state must be unique on each usage, otherwise the generation
-// function will produce duplicated values. We name such state "volatile state"
-// or "volatile memory" if referring to memory. Before using a volatile state,
-// we must make sure to randomize it to preserve its uniqueness.
-//
-// When/how to randomize state depends on the context. For example, the CTR-DRBG
-// state, that is managed by AWS-LC, will randomize itself before usage during
-// normal operation. But there are events where this assumption is violated. We
-// call such events "uniqueness breaking events" (UBE). Forking an address space
-// is an example of an UBE.
-//
-// By detecting UBE's we can ensure that volatile state is properly randomized.
-// AWS-LC is currently able to detect two different type of UBE's that would
-// violate usage requirements of a volatile state. The two UBE types are:
-// Forking and VM resuming. Note, however, that detection methods rely on
-// technology that is unique to a platform. Hence, support for UBE detection
-// also depends on the platform AWS-LC is executed on.
-//
-// This file implements and manages the general machinery to detect an UBE. This
-// should be used by the rest of the code-base to implement proper randomization
-// of volatile states before usage.
-
-static CRYPTO_once_t ube_state_initialize_once = CRYPTO_ONCE_INIT;
-static CRYPTO_once_t ube_methods_unavailable_once = CRYPTO_ONCE_INIT; 
-static struct CRYPTO_STATIC_MUTEX ube_lock = CRYPTO_STATIC_MUTEX_INIT;
-static uint8_t ube_methods_unavailable = 0;
 
 // The UBE generation number is shared for the entire address space. One could
 // implement a per-thread UBE generation number. However, this could be
@@ -85,20 +87,21 @@ struct detection_gn {
   uint64_t current_snapsafe_gn;
 };
 
-// set_ube_methods_unavailable_once is the single mutation point of
-// |ube_methods_unavailable|. Sets the variable to 1 (true).
-static void set_ube_methods_unavailable_once(void) {
-  ube_methods_unavailable = 1;
+// set_ube_detection_unavailable_once is the single mutation point of
+// |ube_detection_unavailable|. Sets the variable to 1 (true).
+static void set_ube_detection_unavailable_once(void) {
+  ube_detection_unavailable = 1;
 }
 
 // ube_failed is a convenience function to synchronize mutation of
-// |ube_methods_unavailable|. In practice, synchronization is not strictly
+// |ube_detection_unavailable|. In practice, synchronization is not strictly
 // needed because currently the mutation is only ever assigning 1 to the
 // variable.
 static void ube_failed(void) {
-  CRYPTO_once(&ube_methods_unavailable_once, set_ube_methods_unavailable_once);
+  CRYPTO_once(&ube_detection_unavailable_once, set_ube_detection_unavailable_once);
 }
 
+// ube_state_initialize initalizes the global state |ube_state|.
 static void ube_state_initialize(void) {
 
   ube_state.generation_number = 0;
@@ -128,7 +131,8 @@ static void ube_update_state(struct detection_gn *current_detection_gn) {
 
 // ube_get_detection_generation_numbers loads the current detection generation
 // numbers into |current_detection_gn|.
-// Return 1 on success and 0 otherwise. The 0 return value means that a
+//
+// Returns 1 on success and 0 otherwise. The 0 return value means that a
 // detection method we expected to be available, is in fact not.
 static int ube_get_detection_generation_numbers(
   struct detection_gn *current_detection_gn) {
@@ -154,7 +158,8 @@ static int ube_get_detection_generation_numbers(
 // the cached detection generation numbers with the current detection generation
 // numbers. The current generation numbers must be loaded into
 // |current_detection_gn| before calling this function.
-// Return 1 if UBE has been detected and 0 if no UBE has been detected.
+//
+// Returns 1 if UBE has been detected and 0 if no UBE has been detected.
 static int ube_is_detected(struct detection_gn *current_detection_gn) {
 
   if (ube_state.cached_fork_gn != current_detection_gn->current_fork_gn ||
@@ -173,9 +178,10 @@ int get_ube_generation_number(uint64_t *current_generation_number) {
   CRYPTO_once(&ube_state_initialize_once, ube_state_initialize);
 
   // If something failed at an earlier point short-circuit immediately. This
-  // check must be done after attempting to initialize the UBE state. Because
+  // saves work in case the UBE detection is not supported. The check below
+  // must be done after attempting to initialize the UBE state. Because
   // initialization might fail and we can short-circuit here.
-  if (ube_methods_unavailable == 1) {
+  if (ube_detection_unavailable == 1) {
     return 0;
   }
 
@@ -204,19 +210,20 @@ int get_ube_generation_number(uint64_t *current_generation_number) {
   // synchronize an update to the UBE generation number. To avoid redundant
   // reseeds, we must ensure the generation number is only incremented once for
   // all UBE's that might have happened. Therefore, first take a write lock but
-  // before mutation the state, check for an UBE again.
+  // before mutation the state, check for an UBE again. Checking again ensures
+  // that only one thread increments the UBE generation number, because the
+  // cached detection method generation numbers have been updated by the thread
+  // that had the first entry.
 
   CRYPTO_STATIC_MUTEX_lock_write(&ube_lock);
-  // Detection generation numbers might have changed. Load all again.
   if (ube_get_detection_generation_numbers(&current_detection_gn) != 1) {
     ube_failed();
     CRYPTO_STATIC_MUTEX_unlock_write(&ube_lock);
     return 0;
   }
-
   if (ube_is_detected(&current_detection_gn) == 0) {
-    // Another thread already update the global state. Just load the UBE
-    // generation number from there.
+    // Another thread already updated the global state. Just load the UBE
+    // generation number instead.
     *current_generation_number = ube_state.generation_number;
     CRYPTO_STATIC_MUTEX_unlock_write(&ube_lock);
     return 1;
