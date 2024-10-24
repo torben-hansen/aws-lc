@@ -25,6 +25,11 @@ struct entropy_source {
 // get_entropy_source will return an entropy source configured for the platform.
 const struct entropy_source * get_entropy_source(void);
 
+OPENSSL_EXPORT int chain_jitter_initialize(void);
+OPENSSL_EXPORT void chain_jitter_cleanup(void);
+OPENSSL_EXPORT int chain_jitter_get_seed(uint8_t seed[CTR_DRBG_ENTROPY_LEN]);
+OPENSSL_EXPORT int chain_jitter_randomize(void);
+
 #if defined(__cplusplus)
 }  // extern C
 #endif

@@ -36,6 +36,7 @@
 
 #include "rand/new_rand.c"
 #include "rand/entropy/entropy_sources.c"
+#include "rand/entropy/chain_jitter_entropy.c"
 
 #include <openssl/digest.h>
 #include <openssl/hmac.h>
