@@ -1273,6 +1273,28 @@ static bool SpeedRandomChunk(std::string name, size_t chunk_len) {
   return true;
 }
 
+
+#include "../crypto/fipsmodule/rand/internal.h"
+
+static bool SpeedRandomChunkRdrand(std::string name, size_t chunk_len) {
+  uint8_t scratch[16384];
+
+  if (chunk_len > sizeof(scratch)) {
+    return false;
+  }
+
+  TimeResults results;
+  if (!TimeFunction(&results, [chunk_len, &scratch]() -> bool {
+        rdrand(scratch, chunk_len);
+        return true;
+      })) {
+    return false;
+  }
+
+  results.PrintWithBytes(name, chunk_len);
+  return true;
+}
+
 static bool SpeedRandom(const std::string &selected) {
   if (!selected.empty() && selected != "RNG") {
     return true;
@@ -1281,6 +1303,14 @@ static bool SpeedRandom(const std::string &selected) {
   for (size_t chunk_len : g_chunk_lengths) {
     if (!SpeedRandomChunk("RNG", chunk_len)) {
       return false;
+    }
+  }
+
+  if (have_hw_rng_x86_64() == 1) {
+    for (size_t chunk_len : g_chunk_lengths) {
+      if (!SpeedRandomChunkRdrand("RDRAND", chunk_len)) {
+        return false;
+      }
     }
   }
 
