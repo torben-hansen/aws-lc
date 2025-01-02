@@ -10,7 +10,7 @@
 #include "../internal.h"
 #include "../../delocate.h"
 
-//#define DISABLE_PREDICTION_RESISTANCE
+#define DISABLE_PREDICTION_RESISTANCE
 
 static int enable_prediction_resistance_build_time(void) {
 #if defined(DISABLE_PREDICTION_RESISTANCE)
