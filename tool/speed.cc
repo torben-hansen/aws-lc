@@ -1263,7 +1263,7 @@ static bool SpeedRandomChunk(std::string name, size_t chunk_len) {
 
   TimeResults results;
   if (!TimeFunction(&results, [chunk_len, &scratch]() -> bool {
-        RAND_bytes(scratch, chunk_len);
+        new_rand_RAND_bytes(scratch, chunk_len);
         return true;
       })) {
     return false;
