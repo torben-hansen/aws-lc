@@ -10,6 +10,15 @@
 #include "../internal.h"
 #include "../../delocate.h"
 
+//#define DISABLE_PREDICTION_RESISTANCE
+
+static int enable_prediction_resistance_build_time(void) {
+#if defined(DISABLE_PREDICTION_RESISTANCE)
+  return 0;
+#else
+  return 1;
+#endif
+}
 static int entropy_get_prediction_resistance(
   const struct entropy_source_t *entropy_source,
   uint8_t pred_resistance[RAND_PRED_RESISTANCE_LEN]) {
@@ -42,8 +51,8 @@ DEFINE_LOCAL_DATA(struct entropy_source_methods, tree_jitter_entropy_source_meth
   out->free_thread = tree_jitter_free_thread_drbg;
   out->get_seed = tree_jitter_get_seed;
   out->get_extra_entropy = entropy_get_extra_entropy;
-  if (have_hw_rng_x86_64() == 1 ||
-      have_hw_rng_aarch64() == 1) {
+  if (enable_prediction_resistance_build_time() == 1 && (have_hw_rng_x86_64() == 1 ||
+      have_hw_rng_aarch64() == 1)) {
     out->get_prediction_resistance = entropy_get_prediction_resistance;
   } else {
     out->get_prediction_resistance = NULL;

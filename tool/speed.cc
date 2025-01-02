@@ -1254,6 +1254,7 @@ static bool SpeedHmacOneShot(const EVP_MD *md, const std::string &name,
   return true;
 }
 
+#include "../crypto/fipsmodule/rand/new_rand_internal.h"
 static bool SpeedRandomChunk(std::string name, size_t chunk_len) {
   uint8_t scratch[16384];
 

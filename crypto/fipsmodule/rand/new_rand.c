@@ -504,7 +504,6 @@ int RAND_bytes_with_user_prediction_resistance(uint8_t *out, size_t out_len,
 }
 
 int NR_PREFIX(RAND_bytes)(uint8_t *out, size_t out_len) {
-
   static const uint8_t kZeroPredResistance[RAND_PRED_RESISTANCE_LEN] = {0};
   RAND_bytes_private(out, out_len, kZeroPredResistance,
     RAND_NO_USER_PRED_RESISTANCE);
