@@ -1269,7 +1269,7 @@ using RandomFunction = std::function<void(uint8_t *, size_t)>;
 static bool SpeedRandomChunk(RandomFunction function, std::string name, size_t chunk_len) {
   std::unique_ptr<uint8_t[]> scratch(new uint8_t[SCRATCH_SIZE]);
 
-  if (chunk_len > sizeof(scratch)) {
+  if (chunk_len > SCRATCH_SIZE) {
     return false;
   }
 
