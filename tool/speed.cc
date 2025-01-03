@@ -1254,6 +1254,8 @@ static bool SpeedHmacOneShot(const EVP_MD *md, const std::string &name,
   return true;
 }
 
+#define NUMBER_OF_THREADS 64
+#include <numeric>
 #include "../crypto/fipsmodule/rand/new_rand_internal.h"
 static bool SpeedRandomChunk(std::string name, size_t chunk_len) {
   uint8_t scratch[16384];
@@ -1262,18 +1264,40 @@ static bool SpeedRandomChunk(std::string name, size_t chunk_len) {
     return false;
   }
 
-  TimeResults results;
-  if (!TimeFunction(&results, [chunk_len, &scratch]() -> bool {
-        new_rand_RAND_bytes(scratch, chunk_len);
-        return true;
-      })) {
-    return false;
+  std::vector<double> thread_results(NUMBER_OF_THREADS);
+  std::vector<std::thread> threads;
+
+  auto thread_func = [&](int thread_id) {
+    TimeResults results;
+    if (!TimeFunction(&results, [chunk_len, &scratch]() -> bool {
+      new_rand_RAND_bytes(scratch, chunk_len);
+      return true;
+    })) {
+      thread_results[thread_id] = 0.0;
+    } else {
+      thread_results[thread_id] = results.num_calls;
+    }
+  };
+
+  for (int i = 0; i < NUMBER_OF_THREADS; ++i) {
+      threads.emplace_back(thread_func, i);
   }
 
+  for (auto& t : threads) {
+      t.join();
+  }
+
+  // Calculate average TPS
+  double total_num_calls = std::accumulate(thread_results.begin(), thread_results.end(), 0.0);
+  double avg_num_calls = total_num_calls / NUMBER_OF_THREADS;
+
+  TimeResults results;
+  results.num_calls = static_cast<uint64_t>(avg_num_calls);
+  results.us = 3000000;
   results.PrintWithBytes(name, chunk_len);
+
   return true;
 }
-
 
 #include "../crypto/fipsmodule/rand/internal.h"
 
@@ -1284,15 +1308,38 @@ static bool SpeedRandomChunkRdrand(std::string name, size_t chunk_len) {
     return false;
   }
 
-  TimeResults results;
-  if (!TimeFunction(&results, [chunk_len, &scratch]() -> bool {
-        rdrand(scratch, chunk_len);
-        return true;
-      })) {
-    return false;
+  std::vector<double> thread_results(NUMBER_OF_THREADS);
+  std::vector<std::thread> threads;
+
+  auto thread_func = [&](int thread_id) {
+    TimeResults results;
+    if (!TimeFunction(&results, [chunk_len, &scratch]() -> bool {
+      rdrand(scratch, chunk_len);
+      return true;
+    })) {
+      thread_results[thread_id] = 0.0;
+    } else {
+      thread_results[thread_id] = results.num_calls;
+    }
+  };
+
+  for (int i = 0; i < NUMBER_OF_THREADS; ++i) {
+      threads.emplace_back(thread_func, i);
   }
 
+  for (auto& t : threads) {
+      t.join();
+  }
+
+  // Calculate average TPS
+  double total_num_calls = std::accumulate(thread_results.begin(), thread_results.end(), 0.0);
+  double avg_num_calls = total_num_calls / NUMBER_OF_THREADS;
+
+  TimeResults results;
+  results.num_calls = static_cast<uint64_t>(avg_num_calls);
+  results.us = 3000000;
   results.PrintWithBytes(name, chunk_len);
+
   return true;
 }
 
