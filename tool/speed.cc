@@ -1263,24 +1263,48 @@ static bool SpeedHmacOneShot(const EVP_MD *md, const std::string &name,
 }
 
 const size_t SCRATCH_SIZE = 16384;
-
+#define NUMBER_OF_THREADS 64
+#include <numeric>
 using RandomFunction = std::function<void(uint8_t *, size_t)>;
 static bool SpeedRandomChunk(RandomFunction function, std::string name, size_t chunk_len) {
   std::unique_ptr<uint8_t[]> scratch(new uint8_t[SCRATCH_SIZE]);
 
-  if (chunk_len > SCRATCH_SIZE) {
+  if (chunk_len > sizeof(scratch)) {
     return false;
   }
+
+  std::vector<double> thread_results(NUMBER_OF_THREADS);
+  std::vector<std::thread> threads;
+
+  auto thread_func = [&](int thread_id) {
+    TimeResults results;
+    if (!TimeFunction(&results, [chunk_len, &scratch, &function]() -> bool {
+        function(scratch.get(), chunk_len);
+      return true;
+    })) {
+      thread_results[thread_id] = 0.0;
+    } else {
+      thread_results[thread_id] = results.num_calls;
+    }
+  };
+
+  for (int i = 0; i < NUMBER_OF_THREADS; ++i) {
+      threads.emplace_back(thread_func, i);
+  }
+
+  for (auto& t : threads) {
+      t.join();
+  }
+
+  // Calculate average TPS
+  double total_num_calls = std::accumulate(thread_results.begin(), thread_results.end(), 0.0);
+  double avg_num_calls = total_num_calls / NUMBER_OF_THREADS;
 
   TimeResults results;
-  if (!TimeFunction(&results, [chunk_len, &scratch, &function]() -> bool {
-        function(scratch.get(), chunk_len);
-        return true;
-      })) {
-    return false;
-  }
-
+  results.num_calls = static_cast<uint64_t>(avg_num_calls);
+  results.us = 3000000;
   results.PrintWithBytes(name, chunk_len);
+
   return true;
 }
 
