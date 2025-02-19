@@ -20,16 +20,15 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <functional>
 #include <iosfwd>
 #include <string>
-#include <thread>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include <openssl/span.h>
 
 #include "../internal.h"
-#include "../ube/fork_detect.h"
 
 
 // hexdump writes |msg| to |fp| followed by the hex encoding of |len| bytes
@@ -84,6 +83,17 @@ bssl::UniquePtr<STACK_OF(X509)> CertsToStack(const std::vector<X509 *> &certs);
 // |RSA*|.
 bssl::UniquePtr<RSA> RSAFromPEM(const char *pem);
 
+// kReferenceTime is the reference time used by certs created by |MakeTestCert|.
+// It is the unix timestamp for Sep 27th, 2016.
+static const int64_t kReferenceTime = 1474934400;
+
+// MakeTestCert creates an X509 certificate for use in testing. It is configured
+// to be valid from 1 day prior |kReferenceTime| until 1 day after
+// |kReferenceTime|.
+bssl::UniquePtr<X509> MakeTestCert(const char *issuer,
+                                          const char *subject, EVP_PKEY *key,
+                                          bool is_ca);
+
 // unique_ptr will automatically call fclose on the file descriptior when the
 // variable goes out of scope, so we need to specify BIO_NOCLOSE close flags
 // to avoid a double-free condition.
@@ -106,18 +116,6 @@ size_t createTempFILEpath(char buffer[PATH_MAX]);
 FILE* createRawTempFILE();
 TempFILE createTempFILE();
 
-// Returns true if operating system is Amazon Linux and false otherwise.
-// Determined at run-time and requires read-permissions to /etc.
-bool osIsAmazonLinux(void);
-
-// Executes |testFunc| simultaneously in |numberThreads| number of threads. If
-// OPENSSL_THREADS is not defined, executes |testFunc| a single time
-// non-concurrently.
-bool threadTest(const size_t numberOfThreads,
-  std::function<void(bool*)> testFunc);
-
-void maybeDisableSomeForkDetectMechanisms(void);
-
 // CustomData is for testing new structs that we add support for |ex_data|.
 typedef struct {
   int custom_data;
@@ -125,5 +123,9 @@ typedef struct {
 
 void CustomDataFree(void *parent, void *ptr, CRYPTO_EX_DATA *ad,
                            int index, long argl, void *argp);
+// ErrorEquals asserts that |err| is an error with library |lib| and reason
+// |reason|.
+testing::AssertionResult ErrorEquals(uint32_t err, int lib, int reason);
+
 
 #endif  // OPENSSL_HEADER_CRYPTO_TEST_TEST_UTIL_H

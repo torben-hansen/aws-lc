@@ -14,9 +14,9 @@
 
 #include "test_util.h"
 
-#include <fstream>
 #include <ostream>
-#include <stdio.h>
+
+#include <openssl/err.h>
 
 #include "../internal.h"
 #include "openssl/pem.h"
@@ -78,6 +78,19 @@ std::string EncodeHex(bssl::Span<const uint8_t> in) {
   return ret;
 }
 
+testing::AssertionResult ErrorEquals(uint32_t err, int lib, int reason) {
+  if (ERR_GET_LIB(err) == lib && ERR_GET_REASON(err) == reason) {
+    return testing::AssertionSuccess();
+  }
+
+  char buf[128], expected[128];
+  return testing::AssertionFailure()
+         << "Got \"" << ERR_error_string_n(err, buf, sizeof(buf))
+         << "\", wanted \""
+         << ERR_error_string_n(ERR_PACK(lib, reason), expected,
+                               sizeof(expected))
+         << "\"";
+}
 // CertFromPEM parses the given, NUL-terminated pem block and returns an
 // |X509*|.
 bssl::UniquePtr<X509> CertFromPEM(const char *pem) {
@@ -96,6 +109,35 @@ bssl::UniquePtr<RSA> RSAFromPEM(const char *pem) {
   }
   return bssl::UniquePtr<RSA>(
       PEM_read_bio_RSAPrivateKey(bio.get(), nullptr, nullptr, nullptr));
+}
+
+bssl::UniquePtr<X509> MakeTestCert(const char *issuer,
+                                          const char *subject, EVP_PKEY *key,
+                                          bool is_ca) {
+  bssl::UniquePtr<X509> cert(X509_new());
+  if (!cert ||  //
+      !X509_set_version(cert.get(), X509_VERSION_3) ||
+      !X509_NAME_add_entry_by_txt(
+          X509_get_issuer_name(cert.get()), "CN", MBSTRING_UTF8,
+          reinterpret_cast<const uint8_t *>(issuer), -1, -1, 0) ||
+      !X509_NAME_add_entry_by_txt(
+          X509_get_subject_name(cert.get()), "CN", MBSTRING_UTF8,
+          reinterpret_cast<const uint8_t *>(subject), -1, -1, 0) ||
+      !X509_set_pubkey(cert.get(), key) ||
+      !ASN1_TIME_adj(X509_getm_notBefore(cert.get()), kReferenceTime, -1, 0) ||
+      !ASN1_TIME_adj(X509_getm_notAfter(cert.get()), kReferenceTime, 1, 0)) {
+    return nullptr;
+  }
+  bssl::UniquePtr<BASIC_CONSTRAINTS> bc(BASIC_CONSTRAINTS_new());
+  if (!bc) {
+    return nullptr;
+  }
+  bc->ca = is_ca ? ASN1_BOOLEAN_TRUE : ASN1_BOOLEAN_FALSE;
+  if (!X509_add1_ext_i2d(cert.get(), NID_basic_constraints, bc.get(),
+                         /*crit=*/1, /*flags=*/0)) {
+    return nullptr;
+  }
+  return cert;
 }
 
 bssl::UniquePtr<STACK_OF(X509)> CertsToStack(
@@ -158,77 +200,3 @@ void CustomDataFree(void *parent, void *ptr, CRYPTO_EX_DATA *ad,
   free(ptr);
 }
 
-bool osIsAmazonLinux(void) {
-  bool res = false;
-#if defined(OPENSSL_LINUX)
-  // Per https://docs.aws.amazon.com/linux/al2023/ug/naming-and-versioning.html.
-  std::ifstream amazonLinuxSpecificFile("/etc/amazon-linux-release-cpe");
-  if (amazonLinuxSpecificFile.is_open()) {
-    // Definitely on Amazon Linux.
-    amazonLinuxSpecificFile.close();
-    return true;
-  }
-
-  // /etc/amazon-linux-release-cpe was introduced in AL2023. For earlier, parse
-  // and read /etc/system-release-cpe.
-  std::ifstream osRelease("/etc/system-release-cpe");
-  if (!osRelease.is_open()) {
-    return false;
-  }
-
-  std::string line;
-  while (std::getline(osRelease, line)) {
-    // AL2:
-    // $ cat /etc/system-release-cpe
-    // cpe:2.3:o:amazon:amazon_linux:2
-    //
-    // AL2023:
-    // $ cat /etc/system-release-cpe
-    // cpe:2.3:o:amazon:amazon_linux:2023
-    if (line.find("amazon") != std::string::npos) {
-      res = true;
-    } else if (line.find("amazon_linux") != std::string::npos) {
-      res = true;
-    }
-  }
-  osRelease.close();
-#endif
-  return res;
-}
-
-bool threadTest(const size_t numberOfThreads, std::function<void(bool*)> testFunc) {
-  bool res = true;
-
-#if defined(OPENSSL_THREADS)
-  // char to be able to pass-as-reference.
-  std::vector<char> retValueVec(numberOfThreads, 0);
-  std::vector<std::thread> threadVec;
-
-  for (size_t i = 0; i < numberOfThreads; i++) {
-    threadVec.emplace_back(testFunc, reinterpret_cast<bool*>(&retValueVec[i]));
-  }
-
-  for (auto& thread : threadVec) {
-    thread.join();
-  }
-
-  for (size_t i = 0; i < numberOfThreads; i++) {
-    if (!static_cast<bool>(retValueVec[i])) {
-      fprintf(stderr, "Thread %lu failed\n", (long unsigned int) i);
-      res = false;
-    }
-  }
-
-#else
-  testFunc(&res);
-#endif
-
-  return res;
-}
-
-void maybeDisableSomeForkDetectMechanisms(void) {
-  if (getenv("BORINGSSL_IGNORE_FORK_DETECTION")) {
-    CRYPTO_fork_detect_ignore_wipeonfork_FOR_TESTING();
-    CRYPTO_fork_detect_ignore_inheritzero_FOR_TESTING();
-  }
-}

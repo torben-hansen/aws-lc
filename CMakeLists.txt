@@ -30,7 +30,6 @@ option(BUILD_TOOL "Build bssl tool for AWS-LC" ON)
 option(ENABLE_DILITHIUM "Enable Dilithium signatures in the EVP API" OFF)
 option(DISABLE_PERL "Disable Perl for AWS-LC" OFF)
 option(DISABLE_GO "Disable Go for AWS-LC" OFF)
-# Keeping this flag for now, for compatibility with existing build configs.
 option(ENABLE_FIPS_ENTROPY_CPU_JITTER "Enable FIPS entropy source: CPU Jitter" OFF)
 option(ENABLE_DATA_INDEPENDENT_TIMING "Enable automatic setting/resetting Data-Independent Timing
 (DIT) flag in cryptographic functions. Currently only applicable to Arm64 (except on Windows)" OFF)
@@ -38,12 +37,18 @@ include(cmake/go.cmake)
 
 enable_language(C)
 
-# The validated entropy source will always be configured to be Jitter Entropy
-# because it's the root of the Tree DRBG.
+# Configure entropy source in case of FIPS build
 if(FIPS)
-  message(STATUS "FIPS seed entropy source method configured: CPU Jitter")
-else()
-  message(STATUS "seed entropy source method configured: CPU Jitter")
+  message(STATUS "FIPS build mode configured")
+
+  if(ENABLE_FIPS_ENTROPY_CPU_JITTER)
+    add_definitions(-DFIPS_ENTROPY_SOURCE_JITTER_CPU)
+    add_subdirectory(third_party/jitterentropy)
+    message(STATUS "FIPS entropy source method configured: CPU Jitter")
+  else()
+    add_definitions(-DFIPS_ENTROPY_SOURCE_PASSIVE)
+    message(STATUS "FIPS entropy source method configured: Passive")
+  endif()
 endif()
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "OpenBSD")
@@ -64,6 +69,10 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "SunOS" AND NOT CMAKE_CROSSCOMPILING)
 
   if (UNAME_O STREQUAL "illumos")
     set(HOST_ILLUMOS 1)
+  endif()
+
+  if (UNAME_O STREQUAL "Solaris")
+    set(HOST_SOLARIS 1)
   endif()
 
   if (HOST_ILLUMOS)
@@ -109,7 +118,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "GNU")
   set(GCC 1)
 endif()
 
-if (UNIX AND NOT APPLE)
+if (NOT WIN32 AND NOT APPLE)
   include(GNUInstallDirs)
 elseif(NOT DEFINED CMAKE_INSTALL_LIBDIR)
   set(CMAKE_INSTALL_LIBDIR "lib")
@@ -136,7 +145,7 @@ if(NOT DISABLE_PERL)
   find_package(Perl REQUIRED)
 endif()
 
-if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux" AND BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
   find_package(PkgConfig QUIET)
   if (PkgConfig_FOUND)
     pkg_check_modules(LIBUNWIND libunwind-generic)
@@ -399,8 +408,10 @@ if(GCC OR CLANG)
   endif()
   set(C_CXX_FLAGS "${C_CXX_FLAGS} -Werror -Wformat=2 -Wsign-compare -Wmissing-field-initializers -Wwrite-strings")
 
-  if(GCC AND CMAKE_C_COMPILER_VERSION VERSION_GREATER "8")
+  if((GCC AND CMAKE_C_COMPILER_VERSION VERSION_GREATER "8") OR
+     (CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_C_COMPILER_VERSION VERSION_LESS "13"))
     # GCC 8.x added a warning called -Wcast-function-type to the -Wextra umbrella.
+    # Also suppress for all clang versions supporting this warning.
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-cast-function-type")
   endif()
 
@@ -726,7 +737,7 @@ if(FIPS)
     message(FATAL_ERROR "Building AWS-LC for FIPS requires Go and Perl")
   endif()
 
-  if(NOT BUILD_SHARED_LIBS AND NOT (UNIX AND NOT APPLE))
+  if(NOT BUILD_SHARED_LIBS AND NOT (NOT WIN32 AND NOT APPLE))
     message(FATAL_ERROR "Static FIPS build of AWS-LC is suported only on Linux")
   endif()
 
@@ -762,8 +773,6 @@ endif()
 
 if(CONSTANT_TIME_VALIDATION)
   add_definitions(-DBORINGSSL_CONSTANT_TIME_VALIDATION)
-  # Asserts will often test secret data.
-  add_definitions(-DNDEBUG)
 endif()
 
 # CMake's iOS support uses Apple's multiple-architecture toolchain. It takes an
@@ -790,7 +799,7 @@ if(OPENSSL_NO_SSE2_FOR_TESTING)
   add_definitions(-DOPENSSL_NO_SSE2_FOR_TESTING)
 endif()
 
-if(HOST_ILLUMOS)
+if(HOST_ILLUMOS OR HOST_SOLARIS)
   #
   # CMAKE_SYSTEM_PROCESSOR unfortunately comes from the output of "uname -p",
   # which on illumos systems emits "i386".  Instead, use the value from
@@ -973,7 +982,11 @@ if(BUILD_TESTING)
         DEPENDS util/embed_test_data.go ${CRYPTO_TEST_DATA}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   else()
-    file(COPY ${GENERATE_CODE_ROOT}/crypto_test_data.cc DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
+    add_custom_command(
+        OUTPUT crypto_test_data.cc
+        COMMAND ${CMAKE_COMMAND} -E tar "jxvf" ${GENERATE_CODE_ROOT}/crypto_test_data.cc.tar.bz2
+        DEPENDS  ${GENERATE_CODE_ROOT}/crypto_test_data.cc.tar.bz2
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
   endif()
   add_library(crypto_test_data OBJECT crypto_test_data.cc)
 
@@ -1015,7 +1028,6 @@ if(BUILD_TESTING)
   endmacro()
 endif()
 
-add_subdirectory(third_party/jitterentropy)
 add_subdirectory(crypto)
 if(BUILD_LIBSSL)
   add_subdirectory(ssl)
@@ -1113,6 +1125,8 @@ if(BUILD_TESTING)
 
       add_custom_target(
         acvp_tests
+        COMMAND ${CMAKE_COMMAND} -E echo
+        COMMAND ${CMAKE_COMMAND} -E echo "Running ACVP tests"
         COMMAND ${GO_EXECUTABLE} run check_expected.go
                   -tool ${ACVP_TOOL}
                   -module-wrappers modulewrapper:$<TARGET_FILE:modulewrapper>,testmodulewrapper:${TEST_WRAPPER}
@@ -1154,6 +1168,7 @@ if(BUILD_TESTING)
     if(BUILD_LIBSSL)
       add_custom_target(
           run_ssl_runner_tests
+          COMMAND ${CMAKE_COMMAND} -E echo "Running SSL tests"
           COMMAND cd ssl/test/runner &&
                   ${GO_EXECUTABLE} test -timeout ${GO_TEST_TIMEOUT} -shim-path $<TARGET_FILE:bssl_shim>
                     ${HANDSHAKER_ARGS} ${RUNNER_ARGS} ${AWS_LC_SSL_RUNNER_INDEX_FILTER} ${SSL_TRANSFER_ARGS}
@@ -1163,6 +1178,7 @@ if(BUILD_TESTING)
 
       add_custom_target(
           run_ssl_runner_tests_valgrind
+          COMMAND ${CMAKE_COMMAND} -E echo "Running SSL tests"
           COMMAND cd ssl/test/runner &&
           ${GO_EXECUTABLE} test -timeout ${GO_TEST_TIMEOUT} -shim-path $<TARGET_FILE:bssl_shim> -valgrind
           ${HANDSHAKER_ARGS} ${RUNNER_ARGS} ${AWS_LC_SSL_RUNNER_INDEX_FILTER} ${SSL_TRANSFER_ARGS}
@@ -1172,7 +1188,11 @@ if(BUILD_TESTING)
 
       add_custom_target(
           run_tests
+          COMMAND ${CMAKE_COMMAND} -E echo
+          COMMAND ${CMAKE_COMMAND} -E echo "Running Go tests"
           COMMAND ${GO_EXECUTABLE} test ${GO_TESTS}
+          COMMAND ${CMAKE_COMMAND} -E echo
+          COMMAND ${CMAKE_COMMAND} -E echo "Running unit tests"
           COMMAND ${GO_EXECUTABLE} run util/all_tests.go -build-dir
                  ${PROJECT_BINARY_DIR}
           WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -1181,7 +1201,10 @@ if(BUILD_TESTING)
     else()
       add_custom_target(
           run_tests
+          COMMAND ${CMAKE_COMMAND} -E echo "Running Go tests"
           COMMAND ${GO_EXECUTABLE} test ${GO_TESTS}
+          COMMAND ${CMAKE_COMMAND} -E echo
+          COMMAND ${CMAKE_COMMAND} -E echo "Running unit tests"
           COMMAND ${GO_EXECUTABLE} run util/all_tests.go -build-dir
                   ${PROJECT_BINARY_DIR} -ssl-tests=false
           WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
