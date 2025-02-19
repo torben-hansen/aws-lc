@@ -14,12 +14,15 @@
 
 #include "test_util.h"
 
+#include <fstream>
 #include <ostream>
+#include <thread>
 
 #include <openssl/err.h>
+#include "openssl/pem.h"
 
 #include "../internal.h"
-#include "openssl/pem.h"
+#include "../ube/fork_detect.h"
 
 
 void hexdump(FILE *fp, const char *msg, const void *in, size_t len) {
