@@ -22,9 +22,13 @@
 #include "../../internal.h"
 #include "../modes/internal.h"
 
+#include <stdio.h>
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
+
+#define PRINT_ABORT_DEBUG fprintf(stderr, "%s(): calling abort()\n", __func__); fflush();
 
 #if defined(BORINGSSL_UNSAFE_DETERMINISTIC_MODE)
 #define OPENSSL_RAND_DETERMINISTIC

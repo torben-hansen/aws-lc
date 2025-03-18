@@ -252,6 +252,7 @@ static void rand_maybe_get_ctr_drbg_pred_resistance(
   if (entropy_source->methods->get_prediction_resistance != NULL) {
     if (entropy_source->methods->get_prediction_resistance(
       entropy_source, pred_resistance) != 1) {
+      PRINT_ABORT_DEBUG
       abort();
     }
     *pred_resistance_len = RAND_PRED_RESISTANCE_LEN;
@@ -279,6 +280,7 @@ static void rand_get_ctr_drbg_seed_entropy(
 
   // If the seed source is missing it is impossible to source any entropy.
   if (entropy_source->methods->get_seed(entropy_source, seed) != 1) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -287,6 +289,7 @@ static void rand_get_ctr_drbg_seed_entropy(
   if (entropy_source->methods->get_extra_entropy != NULL) {
     if(entropy_source->methods->get_extra_entropy(
         entropy_source, extra_entropy) != 1) {
+      PRINT_ABORT_DEBUG
       abort();
     }
     *extra_entropy_len = CTR_DRBG_ENTROPY_LEN;
@@ -303,6 +306,7 @@ static void rand_ctr_drbg_reseed(struct rand_thread_local_state *state,
 
   if (CTR_DRBG_reseed(&(state->drbg), seed, additional_data,
         additional_data_len) != 1) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -318,6 +322,7 @@ static void rand_state_initialize(struct rand_thread_local_state *state) {
 
   state->entropy_source = get_entropy_source();
   if (state->entropy_source == NULL) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -332,6 +337,7 @@ static void rand_state_initialize(struct rand_thread_local_state *state) {
 
   if (!CTR_DRBG_init(&(state->drbg), seed, personalization_string,
         personalization_string_len)) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -451,6 +457,7 @@ static void rand_bytes_core(
 
     if (!CTR_DRBG_generate(&(state->drbg), out, todo, pred_resistance,
           first_pred_resistance_len)) {
+      PRINT_ABORT_DEBUG
       abort();
     }
 
@@ -463,6 +470,7 @@ static void rand_bytes_core(
   OPENSSL_cleanse(pred_resistance, RAND_PRED_RESISTANCE_LEN);
 
   if (rand_ensure_valid_state(state) != 1) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -491,6 +499,7 @@ static void rand_bytes_private(uint8_t *out, size_t out_len,
     if (state == NULL ||
         CRYPTO_set_thread_local(OPENSSL_THREAD_LOCAL_PRIVATE_RAND, state,
                                    rand_thread_local_state_free) != 1) {
+      PRINT_ABORT_DEBUG
       abort();
     }
 

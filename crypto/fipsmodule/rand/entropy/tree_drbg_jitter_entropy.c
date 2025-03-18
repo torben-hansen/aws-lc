@@ -107,6 +107,7 @@ static void tree_jitter_get_root_seed(
   uint8_t seed_out[CTR_DRBG_ENTROPY_LEN]) {
 
   if (tree_jitter_drbg->jitter_ec == NULL) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -128,11 +129,13 @@ static void tree_jitter_get_root_seed(
     tree_jitter_drbg->jitter_ec = NULL;
     tree_jitter_drbg->jitter_ec = jent_entropy_collector_alloc(0, JENT_FORCE_FIPS);
     if (tree_jitter_drbg->jitter_ec == NULL) {
+      PRINT_ABORT_DEBUG
       abort();
     }
   }
 
   if (jitter_generated_output != 1) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 }
@@ -188,6 +191,7 @@ static void tree_jitter_drbg_derive_seed(
   uint8_t seed_out[CTR_DRBG_ENTROPY_LEN]) {
 
   if (tree_jitter_drbg == NULL) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -202,6 +206,7 @@ static void tree_jitter_drbg_derive_seed(
     }
 
     if (CTR_DRBG_reseed(&(tree_jitter_drbg->drbg), seed_drbg, NULL, 0) != 1) {
+      PRINT_ABORT_DEBUG
       abort();
     }
     OPENSSL_cleanse(seed_drbg, CTR_DRBG_ENTROPY_LEN);
@@ -218,6 +223,7 @@ static void tree_jitter_drbg_derive_seed(
 
   if (!CTR_DRBG_generate(&(tree_jitter_drbg->drbg), seed_out, CTR_DRBG_ENTROPY_LEN,
         pred_resistance, pred_resistance_len)) {
+    PRINT_ABORT_DEBUG
     abort();
   }
   OPENSSL_cleanse(pred_resistance, RAND_PRED_RESISTANCE_LEN);
@@ -248,6 +254,7 @@ static void tree_jitter_initialize_once(void) {
   struct tree_jitter_drbg_t *tree_jitter_drbg_global =
     OPENSSL_zalloc(sizeof(struct tree_jitter_drbg_t));
   if (tree_jitter_drbg_global == NULL) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -266,12 +273,14 @@ static void tree_jitter_initialize_once(void) {
   // the default rate (which is 3 in Jitter v3.4.0).
   tree_jitter_drbg_global->jitter_ec = jent_entropy_collector_alloc(0, JENT_FORCE_FIPS);
   if (tree_jitter_drbg_global->jitter_ec == NULL) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
   uint8_t seed_drbg[CTR_DRBG_ENTROPY_LEN];
   tree_jitter_get_root_seed(tree_jitter_drbg_global, seed_drbg);
   if (!CTR_DRBG_init(&(tree_jitter_drbg_global->drbg), seed_drbg, NULL, 0)) {
+    PRINT_ABORT_DEBUG
     abort();
   }
   OPENSSL_cleanse(seed_drbg, CTR_DRBG_ENTROPY_LEN);
@@ -292,6 +301,7 @@ int tree_jitter_initialize(struct entropy_source_t *entropy_source) {
   struct tree_jitter_drbg_t *tree_jitter_drbg =
     OPENSSL_zalloc(sizeof(struct tree_jitter_drbg_t));
   if (tree_jitter_drbg == NULL) {
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -305,6 +315,7 @@ int tree_jitter_initialize(struct entropy_source_t *entropy_source) {
   CRYPTO_STATIC_MUTEX_unlock_write(global_seed_drbg_lock_bss_get());
 
   if (!CTR_DRBG_init(&(tree_jitter_drbg->drbg), seed_drbg, NULL, 0)) {
+    PRINT_ABORT_DEBUG
     abort();
   }
   OPENSSL_cleanse(seed_drbg, CTR_DRBG_ENTROPY_LEN);
@@ -359,6 +370,7 @@ static void tree_jitter_free_global_drbg(void) {
 
   if (global_tree_jitter_drbg->is_global != 1) {
     // Should not happen.
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -415,6 +427,7 @@ static void tree_jitter_zeroize_drbg(
   CRYPTO_sysrand_if_available(random_data, CTR_DRBG_ENTROPY_LEN);
 
   if (CTR_DRBG_reseed(&(tree_jitter_drbg->drbg), random_data, NULL, 0) != 1) {
+    PRINT_ABORT_DEBUG
     abort();
   }
   OPENSSL_cleanse(random_data, CTR_DRBG_ENTROPY_LEN);
@@ -434,6 +447,7 @@ static void tree_jitter_zeroize_global_drbg(void) {
 
   if (tree_jitter_drbg->is_global != 1) {
     // Should not happen.
+    PRINT_ABORT_DEBUG
     abort();
   }
 

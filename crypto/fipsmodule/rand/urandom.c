@@ -226,6 +226,7 @@ static void init_once(void) {
   } else {
     // Other errors are fatal.
     perror("getrandom");
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -245,6 +246,7 @@ static void init_once(void) {
   // Android FIPS builds must support getrandom.
 #if defined(BORINGSSL_FIPS) && defined(OPENSSL_ANDROID)
   perror("getrandom not found");
+  PRINT_ABORT_DEBUG
   abort();
 #endif
 
@@ -255,6 +257,7 @@ static void init_once(void) {
 
   if (fd < 0) {
     perror("failed to open /dev/urandom");
+    PRINT_ABORT_DEBUG
     abort();
   }
 
@@ -263,12 +266,14 @@ static void init_once(void) {
     // Native Client doesn't implement |fcntl|.
     if (errno != ENOSYS) {
       perror("failed to get flags from urandom fd");
+      PRINT_ABORT_DEBUG
       abort();
     }
   } else {
     flags |= FD_CLOEXEC;
     if (fcntl(fd, F_SETFD, flags) == -1) {
       perror("failed to set FD_CLOEXEC on urandom fd");
+      PRINT_ABORT_DEBUG
       abort();
     }
   }
@@ -316,6 +321,7 @@ static void wait_for_entropy(void) {
 
     if (getrandom_ret != 1) {
       perror("getrandom");
+      PRINT_ABORT_DEBUG
       abort();
     }
 #endif  // USE_NR_getrandom
@@ -336,6 +342,7 @@ static void wait_for_entropy(void) {
       fprintf(stderr,
               "RNDGETENTCNT on /dev/urandom failed. We cannot continue in this "
               "case when in FIPS mode.\n");
+      PRINT_ABORT_DEBUG
       abort();
     }
 
@@ -368,6 +375,7 @@ static int fill_with_entropy(uint8_t *out, size_t len, int block, int seed) {
     return 1;
   } else {
     fprintf(stderr, "CCRandomGenerateBytes failed.\n");
+    PRINT_ABORT_DEBUG
     abort();
   }
 #endif
@@ -401,6 +409,7 @@ static int fill_with_entropy(uint8_t *out, size_t len, int block, int seed) {
       r = boringssl_getrandom(out, len, getrandom_flags);
 #else  // USE_NR_getrandom
       fprintf(stderr, "urandom fd corrupt.\n");
+      PRINT_ABORT_DEBUG
       abort();
 #endif
     } else {
@@ -440,6 +449,7 @@ void CRYPTO_init_sysrand(void) {
 void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   if (!fill_with_entropy(out, requested, /*block=*/1, /*seed=*/0)) {
     perror("entropy fill failed");
+    PRINT_ABORT_DEBUG
     abort();
   }
 }
@@ -447,6 +457,7 @@ void CRYPTO_sysrand(uint8_t *out, size_t requested) {
 void CRYPTO_sysrand_for_seed(uint8_t *out, size_t requested) {
   if (!fill_with_entropy(out, requested, /*block=*/1, /*seed=*/1)) {
     perror("entropy fill failed");
+    PRINT_ABORT_DEBUG
     abort();
   }
 }
@@ -459,6 +470,7 @@ int CRYPTO_sysrand_if_available(uint8_t *out, size_t requested) {
     return 0;
   } else {
     perror("opportunistic entropy fill failed");
+    PRINT_ABORT_DEBUG
     abort();
   }
 }
