@@ -28,7 +28,7 @@
 extern "C" {
 #endif
 
-#define PRINT_ABORT_DEBUG fprintf(stderr, "%s(): calling abort()\n", __func__); fflush();
+#define PRINT_ABORT_DEBUG fprintf(stderr, "%s(): calling abort()\n", __func__); fflush(stderr);
 
 #if defined(BORINGSSL_UNSAFE_DETERMINISTIC_MODE)
 #define OPENSSL_RAND_DETERMINISTIC
