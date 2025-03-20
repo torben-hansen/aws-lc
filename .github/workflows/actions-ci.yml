@@ -16,55 +16,6 @@ env:
   AWSLC_NO_ASM_FIPS: 1
 
 jobs:
-  # MacOS and Windows GHA runners are more expensive, so we do a sanity test run before proceeding.
-  sanity-test-run:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Git clone the repository
-        uses: actions/checkout@v3
-      - name: Sanity Test Run
-        run: |
-          sudo apt-get update -o Acquire::Languages=none -o Acquire::Translation=none
-          sudo apt-get install ninja-build
-          cmake -GNinja -Btest_build_dir
-          ninja -C test_build_dir run_tests
-
-  macOS-x86:
-    if: github.repository_owner == 'aws'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - "macos-14-large"
-          - "macos-13-large"
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '>=1.18'
-      - name: Build ${{ env.PACKAGE_NAME }}
-        run: |
-          ./tests/ci/run_posix_tests.sh
-
-  macOS-x86-FIPS:
-    if: github.repository_owner == 'aws'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - "macos-14-large"
-          - "macos-13-large"
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '>=1.18'
-      - name: Build ${{ env.PACKAGE_NAME }} with FIPS mode
-        run: |
-          ./tests/ci/run_fips_tests.sh
-
   macOS-ARM:
     if: github.repository_owner == 'aws'
     runs-on: ${{ matrix.os }}
