@@ -815,8 +815,7 @@ int jent_entropy_init_ex(unsigned int osr, unsigned int flags)
 {
 	int ret = jent_entropy_init_common_pre();
 
-	if (ret <= 0) {
-		PRINT_DEBUG(ret)
+	if (ret < 0) {
 		return ret;
 	}
 
@@ -834,7 +833,7 @@ int jent_entropy_init_ex(unsigned int osr, unsigned int flags)
 					     flags | JENT_FORCE_INTERNAL_TIMER);
 #endif /* JENT_CONF_ENABLE_INTERNAL_TIMER */
 
-	if (ret <= 0) {
+	if (ret < 0) {
 		PRINT_DEBUG(ret)		
 	}
 
