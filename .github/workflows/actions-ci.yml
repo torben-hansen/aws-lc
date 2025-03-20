@@ -31,7 +31,6 @@ jobs:
 
   macOS-x86:
     if: github.repository_owner == 'aws'
-    needs: [sanity-test-run]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -50,7 +49,6 @@ jobs:
 
   macOS-x86-FIPS:
     if: github.repository_owner == 'aws'
-    needs: [sanity-test-run]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -69,7 +67,6 @@ jobs:
 
   macOS-ARM:
     if: github.repository_owner == 'aws'
-    needs: [sanity-test-run]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -88,7 +85,6 @@ jobs:
 
   macOS-ARM-FIPS:
     if: github.repository_owner == 'aws'
-    needs: [sanity-test-run]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
