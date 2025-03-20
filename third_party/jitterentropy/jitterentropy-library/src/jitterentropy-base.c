@@ -61,7 +61,7 @@
  *
  * SP800-90B requires at least 1024 initial test cycles.
  */
-#define JENT_POWERUP_TESTLOOPCOUNT 1024
+#define JENT_POWERUP_TESTLOOPCOUNT (1024*4)
 
 /**
  * jent_version() - Return machine-usable version number of jent library
