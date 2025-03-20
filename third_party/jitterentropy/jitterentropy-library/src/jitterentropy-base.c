@@ -42,7 +42,7 @@
     do { \
         fprintf(stderr, "%s() on line %d jitter error %d\n", __func__, __LINE__, error); \
         fflush(stderr); \
-    } while(0)
+    } while(0);
 
 /***************************************************************************
  * Jitter RNG Static Definitions
