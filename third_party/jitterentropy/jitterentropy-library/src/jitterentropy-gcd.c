@@ -96,6 +96,8 @@ static int jent_gcd_analyze_internal(uint64_t *delta_history, size_t nelem,
 	return 0;
 }
 
+#include <inttypes.h>
+#include <stdio.h>
 int jent_gcd_analyze(uint64_t *delta_history, size_t nelem)
 {
 	uint64_t running_gcd, delta_sum;
@@ -109,6 +111,9 @@ int jent_gcd_analyze(uint64_t *delta_history, size_t nelem)
 	 * Variations of deltas of time must on average be larger than 1 to
 	 * ensure the entropy estimation implied with 1 is preserved.
 	 */
+	fprintf(stderr, "delta_sum = %" PRIu64 "\n", delta_sum);
+	fprintf(stderr, "nelem - 1 = %zu\n", nelem - 1);
+	fflush(stderr);
 	if (delta_sum <= nelem - 1) {
 		ret = EMINVARVAR;
 		goto out;
