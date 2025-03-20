@@ -37,6 +37,9 @@
 #include "jitterentropy-timer.h"
 #include "jitterentropy-sha3.h"
 
+#include <stdio.h>
+#define PRINT_DEBUG(error) fprintf(stderr, "%s() on line %d jitter error %d\n", __func__, __LINE__, error); fflush(stderr);
+
 /***************************************************************************
  * Jitter RNG Static Definitions
  *
@@ -445,23 +448,30 @@ static struct rand_data
 	 */
 	if ((flags & JENT_DISABLE_INTERNAL_TIMER) &&
 	    (flags & JENT_FORCE_INTERNAL_TIMER))
+		PRINT_DEBUG(0)
 		return NULL;
 
 	/* Force the self test to be run */
-	if (!jent_selftest_run && jent_entropy_init_ex(osr, flags))
+	if (!jent_selftest_run && jent_entropy_init_ex(osr, flags)) {
+		PRINT_DEBUG(0)
 		return NULL;
+	}
 
 	/*
 	 * If the initial test code concludes to force the internal timer
 	 * and the user requests it not to be used, do not allocate
 	 * the Jitter RNG instance.
 	 */
-	if (jent_notime_forced() && (flags & JENT_DISABLE_INTERNAL_TIMER))
+	if (jent_notime_forced() && (flags & JENT_DISABLE_INTERNAL_TIMER)) {
+		PRINT_DEBUG(0)
 		return NULL;
+	}
 
 	entropy_collector = jent_zalloc(sizeof(struct rand_data));
-	if (NULL == entropy_collector)
+	if (NULL == entropy_collector) {
+		PRINT_DEBUG(0)
 		return NULL;
+	}
 
 	if (!(flags & JENT_DISABLE_MEMORY_ACCESS)) {
 		memsize = jent_memsize(flags);
@@ -479,18 +489,24 @@ static struct rand_data
 
 		/* sanity check */
 		if (entropy_collector->memblocksize *
-		    entropy_collector->memblocks != memsize)
+		    entropy_collector->memblocks != memsize) {
+			PRINT_DEBUG(0)
 			goto err;
+		}
 
 #endif /* JENT_RANDOM_MEMACCESS */
 
-		if (entropy_collector->mem == NULL)
+		if (entropy_collector->mem == NULL) {
+			PRINT_DEBUG(0)
 			goto err;
+		}
 		entropy_collector->memaccessloops = JENT_MEMORY_ACCESSLOOPS;
 	}
 
-	if (jent_sha3_alloc(&entropy_collector->hash_state))
+	if (jent_sha3_alloc(&entropy_collector->hash_state)) {
+		PRINT_DEBUG(0)
 		goto err;
+	}
 
 	/* Initialize the hash state */
 	jent_sha3_256_init(entropy_collector->hash_state);
@@ -525,8 +541,10 @@ static struct rand_data
 	 * entropy_collector!
 	 */
 	if (!(flags & JENT_DISABLE_INTERNAL_TIMER)) {
-		if (jent_notime_enable(entropy_collector, flags))
+		if (jent_notime_enable(entropy_collector, flags)) {
+			PRINT_DEBUG(0)
 			goto err;
+		}
 	}
 
 	return entropy_collector;
@@ -546,11 +564,14 @@ static struct rand_data *_jent_entropy_collector_alloc(unsigned int osr,
 	struct rand_data *ec = jent_entropy_collector_alloc_internal(osr,
 								     flags);
 
-	if (!ec)
+	if (!ec) {
+		PRINT_DEBUG(0)
 		return ec;
+	}
 
 	/* fill the data pad with non-zero values */
 	if (jent_notime_settick(ec)) {
+		PRINT_DEBUG(0)
 		jent_entropy_collector_free(ec);
 		return NULL;
 	}
@@ -596,8 +617,10 @@ int jent_time_entropy_init(unsigned int osr, unsigned int flags)
 	unsigned int health_test_result;
 
 	delta_history = jent_gcd_init(JENT_POWERUP_TESTLOOPCOUNT);
-	if (!delta_history)
+	if (!delta_history) {
+		PRINT_DEBUG(EMEM)
 		return EMEM;
+	}
 
 	if (flags & JENT_FORCE_INTERNAL_TIMER)
 		jent_notime_force();
@@ -617,11 +640,13 @@ int jent_time_entropy_init(unsigned int osr, unsigned int flags)
 	ec = jent_entropy_collector_alloc_internal(osr, flags);
 	if (!ec) {
 		ret = EMEM;
+		PRINT_DEBUG(ret)
 		goto out;
 	}
 
 	if (jent_notime_settick(ec)) {
 		ret = EMEM;
+		PRINT_DEBUG(ret)
 		goto out;
 	}
 
@@ -652,6 +677,7 @@ int jent_time_entropy_init(unsigned int osr, unsigned int flags)
 		/* test whether timer works */
 		if (!start_time || !end_time) {
 			ret = ENOTIME;
+			PRINT_DEBUG(ret)
 			goto out;
 		}
 
@@ -662,6 +688,7 @@ int jent_time_entropy_init(unsigned int osr, unsigned int flags)
 		 */
 		if (!delta || (end_time == start_time)) {
 			ret = ECOARSETIME;
+			PRINT_DEBUG(ret)
 			goto out;
 		}
 
@@ -695,25 +722,31 @@ int jent_time_entropy_init(unsigned int osr, unsigned int flags)
 	 */
 	if (time_backwards > 3) {
 		ret = ENOMONOTONIC;
+		PRINT_DEBUG(ret)
 		goto out;
 	}
 
 	/* First, did we encounter a health test failure? */
 	if ((health_test_result = jent_health_failure(ec))) {
 		ret = (health_test_result & JENT_RCT_FAILURE) ? ERCT : EHEALTH;
+		PRINT_DEBUG(ret)
 		goto out;
 	}
 
 	ret = jent_gcd_analyze(delta_history, JENT_POWERUP_TESTLOOPCOUNT);
-	if (ret)
+	if (ret) {
+		PRINT_DEBUG(ret)
 		goto out;
+	}
 
 	/*
 	 * If we have more than 90% stuck results, then this Jitter RNG is
 	 * likely to not work well.
 	 */
-	if (JENT_STUCK_INIT_THRES(JENT_POWERUP_TESTLOOPCOUNT) < count_stuck)
+	if (JENT_STUCK_INIT_THRES(JENT_POWERUP_TESTLOOPCOUNT) < count_stuck) {
 		ret = ESTUCK;
+		PRINT_DEBUG(ret)
+	}
 
 out:
 	jent_gcd_fini(delta_history, JENT_POWERUP_TESTLOOPCOUNT);
@@ -767,6 +800,8 @@ int jent_entropy_init(void)
 		ret = jent_time_entropy_init(0, JENT_FORCE_INTERNAL_TIMER);
 #endif /* JENT_CONF_ENABLE_INTERNAL_TIMER */
 
+	PRINT_DEBUG(ret)
+
 	return jent_entropy_init_common_post(ret);
 }
 
@@ -775,8 +810,10 @@ int jent_entropy_init_ex(unsigned int osr, unsigned int flags)
 {
 	int ret = jent_entropy_init_common_pre();
 
-	if (ret)
+	if (ret) {
+		PRINT_DEBUG(ret)
 		return ret;
+	}
 
 	ret = ENOTIME;
 
@@ -791,6 +828,8 @@ int jent_entropy_init_ex(unsigned int osr, unsigned int flags)
 		ret = jent_time_entropy_init(osr,
 					     flags | JENT_FORCE_INTERNAL_TIMER);
 #endif /* JENT_CONF_ENABLE_INTERNAL_TIMER */
+
+	PRINT_DEBUG(ret)
 
 	return jent_entropy_init_common_post(ret);
 }
