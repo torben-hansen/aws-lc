@@ -111,10 +111,11 @@ int jent_gcd_analyze(uint64_t *delta_history, size_t nelem)
 	 * Variations of deltas of time must on average be larger than 1 to
 	 * ensure the entropy estimation implied with 1 is preserved.
 	 */
+
+	if (delta_sum <= nelem - 1) {
 	fprintf(stderr, "delta_sum = %" PRIu64 "\n", delta_sum);
 	fprintf(stderr, "nelem - 1 = %zu\n", nelem - 1);
 	fflush(stderr);
-	if (delta_sum <= nelem - 1) {
 		ret = EMINVARVAR;
 		goto out;
 	}
