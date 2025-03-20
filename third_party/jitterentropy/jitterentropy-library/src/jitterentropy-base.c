@@ -38,7 +38,11 @@
 #include "jitterentropy-sha3.h"
 
 #include <stdio.h>
-#define PRINT_DEBUG(error) fprintf(stderr, "%s() on line %d jitter error %d\n", __func__, __LINE__, error); fflush(stderr);
+#define PRINT_DEBUG(error) \
+    do { \
+        fprintf(stderr, "%s() on line %d jitter error %d\n", __func__, __LINE__, error); \
+        fflush(stderr); \
+    } while(0)
 
 /***************************************************************************
  * Jitter RNG Static Definitions
@@ -447,9 +451,10 @@ static struct rand_data
 	 * makes no sense.
 	 */
 	if ((flags & JENT_DISABLE_INTERNAL_TIMER) &&
-	    (flags & JENT_FORCE_INTERNAL_TIMER))
+	    (flags & JENT_FORCE_INTERNAL_TIMER)) {
 		PRINT_DEBUG(0)
 		return NULL;
+	}
 
 	/* Force the self test to be run */
 	if (!jent_selftest_run && jent_entropy_init_ex(osr, flags)) {
