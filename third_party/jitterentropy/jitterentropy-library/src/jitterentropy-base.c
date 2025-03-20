@@ -740,17 +740,20 @@ int jent_time_entropy_init(unsigned int osr, unsigned int flags)
 	}
 
 	ret = jent_gcd_analyze(delta_history, JENT_POWERUP_TESTLOOPCOUNT);
+#if 0
 		for (size_t ind = 0; ind < JENT_POWERUP_TESTLOOPCOUNT; ind++) {
 			fprintf(stderr, "delta: %" PRIu64 "\n", delta_history[ind]);
 			fflush(stderr);
 		}
+#endif
 	if (ret) {
 		PRINT_DEBUG(ret)
 		for (size_t ind = 0; ind < JENT_POWERUP_TESTLOOPCOUNT; ind++) {
 			fprintf(stderr, "delta: %" PRIu64 "\n", delta_history[ind]);
 			fflush(stderr);
 		}
-		goto out;
+		//goto out;
+		// Just continue
 	}
 
 	/*
