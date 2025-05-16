@@ -244,16 +244,6 @@ func (d *delocation) processDirective(statement, directive *node32) (*node32, er
 	case "section":
 		section := args[0]
 
-		if section == ".data.rel.ro" {
-			// In a normal build, this is an indication of a
-			// problem but any references from the module to this
-			// section will result in a relocation and thus will
-			// break the integrity check. ASAN can generate these
-			// sections and so we will likely have to work around
-			// that in the future.
-			return nil, errors.New(".data.rel.ro section found in module")
-		}
-
 		sectionType, ok := sectionType(section)
 		if !ok {
 			// Unknown sections are permitted in order to be robust
@@ -273,8 +263,11 @@ func (d *delocation) processDirective(statement, directive *node32) (*node32, er
 			d.output.WriteString(".text\n")
 
 		case ".data":
-			// See above about .data
-			return nil, errors.New(".data section found in module")
+			// In a normal build, this is not an indication of a
+			// problem but any references from the module to this
+			// section will result in a relocation and thus will
+			// break the FIPS integrity check.
+			return nil, errors.New(".data section found in module. Section name is" + section)
 
 		case ".init_array", ".fini_array", ".ctors", ".dtors":
 			// init_array/ctors/dtors contains function
