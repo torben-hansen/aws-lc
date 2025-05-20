@@ -267,7 +267,7 @@ func (d *delocation) processDirective(statement, directive *node32) (*node32, er
 			// problem but any references from the module to this
 			// section will result in a relocation and thus will
 			// break the FIPS integrity check.
-			return nil, errors.New(".data section found in module. Section name is" + section)
+			return nil, errors.New(".data section found in module. Section name is: " + section)
 
 		case ".init_array", ".fini_array", ".ctors", ".dtors":
 			// init_array/ctors/dtors contains function
