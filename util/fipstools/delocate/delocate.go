@@ -225,7 +225,7 @@ func (d *delocation) processDirective(statement, directive *node32) (*node32, er
 			assertNodeType(arg, ruleQuotedText)
 		}
 		args = append(args, d.contents(arg))
-	}, ruleArgs, ruleArg)
+	}, false, ruleArgs, ruleArg)
 
 	switch directiveName {
 	case "comm", "lcomm":
@@ -1835,6 +1835,156 @@ func writeAarch64Function(w stringWriter, funcName string, writeContents func(st
 	w.WriteString(".size " + funcName + ", .-" + funcName + "\n")
 }
 
+func isNewLine(file string, node *node32) bool {
+	statementName := file[node.begin:node.end];
+	if statementName == "\n" {
+		return true
+	}
+	return false
+}
+
+func isEndOfRelroSection(file string, lineRootNode *node32) bool {
+
+	/* Skippable pattern
+	Statement "\n"
+	*/
+	if isNewLine(file, lineRootNode) {
+		return false
+	}
+
+	nodeNext := lineRootNode.up
+
+	/* Skippable pattern
+	Statement "\t.align 8\n"
+	  WS "\t"
+	  Directive ".align 8"
+	   DirectiveName "align"
+	   WS " "
+	   Args "8"
+	    Arg "8"
+	*/
+	if matchPatternSearchSubtree(nodeNext, func(node *node32) bool {
+			directiveName := file[node.begin:node.end];
+			if directiveName == "align" {
+				return true
+			}
+			return false
+		}, ruleDirective, ruleDirectiveName) {
+		return false
+	}
+
+	return true
+}
+
+func findLocalLabelsForRelro(file string, node *node32, relroLocalLabelToFuncMap map[string]string) {
+	/* Stanza pattern
+	Statement "\t.align 8\n"
+	  WS "\t"
+	  Directive ".align 8"
+	   DirectiveName "align"
+	   WS " "
+	   Args "8"
+	    Arg "8"
+	 Statement ".LC0:"
+	  Label ".LC0:"
+	   LocalSymbol ".LC0"
+	 Statement "\n"
+	 Statement "\t.quad\tfoo_init\n"
+	  WS "\t"
+	  LabelContainingDirective ".quad\tfoo_init"
+	   LabelContainingDirectiveName ".quad"
+	   WS "\t"
+	   SymbolArgs "foo_init"
+	    SymbolArg "foo_init"
+	     SymbolExpr "foo_init"
+	      SymbolAtom "foo_init"
+	       SymbolName "foo_init"
+  */
+
+  currentLineRootNode := node
+  for ; currentLineRootNode != nil; currentLineRootNode = currentLineRootNode.next {
+
+  	// First, we search for a local symbol
+  	localSymbolName := ""
+  	if matchPatternSearchSubtree(currentLineRootNode.up, func(node *node32) bool {
+  			symbolName := file[node.begin:node.end];
+  			if _, exists := relroLocalLabelToFuncMap[symbolName]; exists {
+  				panic(fmt.Sprintf("Duplicate symbol found: %q", symbolName))
+  				return false
+  			}
+
+  			// Quick sanity check that we have found what we expect to find
+  			if strings.HasPrefix(symbolName, ".L")  {
+  				localSymbolName = symbolName
+  				return true
+  			}
+  			return false
+  		}, ruleLabel, ruleLocalSymbol) {
+
+  		// Reaching this point, we have found a local symbol. Now we need to
+  		// search for the function symbol.
+  		currentLineRootNode = currentLineRootNode.next
+
+  		// We might need to skip a newline
+  		if isNewLine(file, currentLineRootNode) {
+  			currentLineRootNode = currentLineRootNode.next
+  		}
+
+  		// The function name should be an argument to a directive
+  		if !matchPatternSearchSubtree(currentLineRootNode.up, func(node *node32) bool {
+  				// TODO implement some sanity check on function symbol
+  				relroLocalLabelToFuncMap[localSymbolName] = file[node.begin:node.end]
+  				return true
+  			}, ruleLabelContainingDirective, ruleSymbolArgs) {
+  			panic(fmt.Sprintf("After finding %q under a .data.rel.ro[.local] section, expected to find a function name\n", symbolName))
+  		}
+  	}
+
+  	// Check if we are at the end of the relro section.
+		if isEndOfRelroSection(file, currentLineRootNode) {
+			break
+		}
+  }
+}
+
+func relroLocalLabelToFuncMapping(input inputFile, relroLocalLabelToFuncMap map[string]string) {
+
+	/* Assumed pattern
+	Statement "\t.section\t.data.rel.ro.local\n"
+	  WS "\t"
+	  Directive ".section\t.data.rel.ro.local"
+	   DirectiveName "section"
+	   WS "\t"
+	   Args ".data.rel.ro.local"
+	    Arg ".data.rel.ro.local"
+	*/
+
+	matchRelRoCb := func(node *node32) bool {
+		sectionType := input.contents[node.begin:node.end];
+		if strings.HasPrefix(sectionType, ".data.rel.ro") ||
+			 strings.HasPrefix(sectionType, ".ldata.rel.ro") {
+			 return true
+		}
+		return false
+	}
+
+	// We must first locate all relro sections. If we find a relro section then
+	// we extract all local symbol <-> function symbol mappings and save them
+	// for later.
+	currentLineRootNode := input.ast.up
+	for ; currentLineRootNode != nil; currentLineRootNode = currentLineRootNode.next {
+		if matchPatternOneLine(currentLineRootNode, matchRelRoCb,
+			ruleStatement, ruleDirective, ruleArgs, ruleArg) {
+			findLocalLabelsForRelro(input.contents, currentLineRootNode.next, relroLocalLabelToFuncMap)
+		}
+	}
+
+  fmt.Printf("relroLocalLabelToFuncMap map:\n")
+  for key, value := range relroLocalLabelToFuncMap {
+    fmt.Printf("%s: %s\n", key, value)
+	}
+}
+
 func transform(w stringWriter, includes []string, inputs []inputFile, startEndDebugDirectives bool) error {
 	// symbols contains all defined symbols.
 	symbols := make(map[string]struct{})
@@ -1849,6 +1999,8 @@ func transform(w stringWriter, includes []string, inputs []inputFile, startEndDe
 	// checksums in .file directives. If it does so, then this script needs
 	// to match that behaviour otherwise warnings result.
 	fileDirectivesContainMD5 := false
+	// TODO
+	relroLocalLabelToFuncMap := make(map[string]string)
 
 	// OPENSSL_ia32cap_get will be synthesized by this script.
 	symbols["OPENSSL_ia32cap_get"] = struct{}{}
@@ -1861,6 +2013,11 @@ func transform(w stringWriter, includes []string, inputs []inputFile, startEndDe
 		w.WriteString(fmt.Sprintf("#include <%s>\n", relative))
 	}
 
+	processor := x86_64
+	if len(inputs) > 0 {
+		processor = detectProcessor(inputs[0])
+	}
+
 	for _, input := range inputs {
 		forEachPath(input.ast.up, func(node *node32) {
 			symbol := input.contents[node.begin:node.end]
@@ -1868,7 +2025,7 @@ func transform(w stringWriter, includes []string, inputs []inputFile, startEndDe
 				panic(fmt.Sprintf("Duplicate symbol found: %q in %q", symbol, input.path))
 			}
 			symbols[symbol] = struct{}{}
-		}, ruleStatement, ruleLabel, ruleSymbolName)
+		}, false, ruleStatement, ruleLabel, ruleSymbolName)
 
 		forEachPath(input.ast.up, func(node *node32) {
 			node = node.up
@@ -1887,7 +2044,7 @@ func transform(w stringWriter, includes []string, inputs []inputFile, startEndDe
 				panic(fmt.Sprintf("Duplicate .localentry directive found: %q in %q", symbol, input.path))
 			}
 			localEntrySymbols[symbol] = struct{}{}
-		}, ruleStatement, ruleLabelContainingDirective)
+		}, false, ruleStatement, ruleLabelContainingDirective)
 
 		forEachPath(input.ast.up, func(node *node32) {
 			assertNodeType(node, ruleLocationDirective)
@@ -1922,12 +2079,11 @@ func transform(w stringWriter, includes []string, inputs []inputFile, startEndDe
 					fileDirectivesContainMD5 = true
 				}
 			}
-		}, ruleStatement, ruleLocationDirective)
-	}
+		}, false, ruleStatement, ruleLocationDirective)
 
-	processor := x86_64
-	if len(inputs) > 0 {
-		processor = detectProcessor(inputs[0])
+		if processor == x86_64 {
+			relroLocalLabelToFuncMapping(input, relroLocalLabelToFuncMap)
+		}
 	}
 
 	commentIndicator := "#"
@@ -2223,6 +2379,8 @@ func parseInputs(inputs []inputFile, cppCommand []string) error {
 		}
 		ast := asm.AST()
 
+		//asm.PrintSyntaxTree()
+
 		inputs[i].contents = contents
 		inputs[i].ast = ast
 	}
@@ -2362,7 +2520,51 @@ func main() {
 	}
 }
 
-func forEachPath(node *node32, cb func(*node32), rules ...pegRule) {
+func matchPatternSearchSubtree(node *node32, matchNode func(*node32) bool, rules ...pegRule) bool {
+	if node == nil {
+		return false
+	}
+
+	rule := rules[0]
+	childRules := rules[1:]
+
+	for ; node != nil; node = node.next {
+		if rule != node.pegRule {
+			continue
+		}
+
+		if len(childRules) == 0 {
+			return matchNode(node)
+		}
+
+		if matchPatternSearchSubtree(node.up, matchNode, childRules...) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func matchPatternOneLine(lineRootNode *node32, matchNode func(*node32) bool, rules ...pegRule) bool {
+	if lineRootNode == nil || len(rules) == 0 {
+		return false
+	}
+
+	rule := rules[0]
+	childRules := rules[1:]
+
+	if rule != lineRootNode.pegRule {
+		return false
+	}
+
+	if len(childRules) == 0 {
+		return matchNode(lineRootNode)
+	}
+
+	return matchPatternSearchSubtree(lineRootNode.up, matchNode, childRules...)
+}
+// TODO remove the skipWs
+func forEachPath(node *node32, cb func(*node32), skipWs bool, rules ...pegRule) {
 	if node == nil {
 		return
 	}
@@ -2376,6 +2578,10 @@ func forEachPath(node *node32, cb func(*node32), rules ...pegRule) {
 	childRules := rules[1:]
 
 	for ; node != nil; node = node.next {
+		if skipWs {
+			node = skipWS(node)			
+		}
+
 		if node.pegRule != rule {
 			continue
 		}
@@ -2383,7 +2589,7 @@ func forEachPath(node *node32, cb func(*node32), rules ...pegRule) {
 		if len(childRules) == 0 {
 			cb(node)
 		} else {
-			forEachPath(node.up, cb, childRules...)
+			forEachPath(node.up, cb, skipWs, childRules...)
 		}
 	}
 }
