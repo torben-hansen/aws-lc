@@ -97,6 +97,8 @@ type delocation struct {
 	// cpuCapUniqueSymbols represents the set of unique symbols for each
 	// discovered occurrence of OPENSSL_ia32cap_P.
 	cpuCapUniqueSymbols []*cpuCapUniqueSymbol
+	// TODO
+	relroLocalLabelToFuncMap map[string]string
 	// redirectors maps from out-call symbol name to the name of a
 	// redirector function for that symbol. E.g. “memcpy” ->
 	// “bcm_redirector_memcpy”.
@@ -205,6 +207,54 @@ func (d *delocation) processInput(input inputFile) (err error) {
 	return nil
 }
 
+func (d *delocation) skippedLine(node *node32) {
+	if isNewLine(d.currentInput.contents, node) {
+		d.output.WriteString(fmt.Sprintf("# SKIPPED newline\n"))
+	} else {
+		d.output.WriteString(fmt.Sprintf("# SKIPPED %s\n", d.currentInput.contents[node.begin:node.end]))
+	}
+}
+
+func (d *delocation) canSkip(node *node32) bool {
+
+	if !isEndOfRelroSection(d.currentInput.contents, node) {
+		d.skippedLine(node)
+		return true
+	}
+
+	if matchPatternSearchSubtree(node.up, func(node *node32) bool {
+  	return true
+  	}, ruleLabel, ruleLocalSymbol) {
+  	d.skippedLine(node)
+  	return true
+  }
+
+  if matchPatternSearchSubtree(node.up, func(node *node32) bool {
+  	directiveName := d.currentInput.contents[node.begin:node.end]
+  	if directiveName == ".quad" {
+  		return true
+  	}
+  	return false
+		}, ruleLabelContainingDirective, ruleLabelContainingDirectiveName) {
+		d.skippedLine(node)
+		return true
+	}
+
+	return false
+}
+
+func (d *delocation) skipRelroSection(statement *node32) *node32 {
+	previousStatement := statement
+	for ; statement != nil; statement = statement.next {
+		if !d.canSkip(statement) {
+			break
+		}
+		previousStatement = statement
+	}
+
+	return previousStatement
+}
+
 func (d *delocation) processDirective(statement, directive *node32) (*node32, error) {
 	assertNodeType(directive, ruleDirectiveName)
 	directiveName := d.contents(directive)
@@ -244,14 +294,13 @@ func (d *delocation) processDirective(statement, directive *node32) (*node32, er
 	case "section":
 		section := args[0]
 
-		if section == ".data.rel.ro" {
-			// In a normal build, this is an indication of a
-			// problem but any references from the module to this
-			// section will result in a relocation and thus will
-			// break the integrity check. ASAN can generate these
-			// sections and so we will likely have to work around
-			// that in the future.
-			return nil, errors.New(".data.rel.ro section found in module")
+		if strings.HasPrefix(section, ".data.rel.ro") {
+			d.skippedLine(statement)
+			statement = d.skipRelroSection(statement.next)
+			if statement != nil {
+				break
+			}
+			return nil, errors.New("Failed to skip .data.rel.ro[.local] section")
 		}
 
 		sectionType, ok := sectionType(section)
@@ -1413,6 +1462,12 @@ func (d *delocation) isRIPRelative(node *node32) bool {
 	return node != nil && node.pegRule == ruleBaseIndexScale && d.contents(node) == "(%rip)"
 }
 
+type RelroRewrite struct {
+	isRelroRewrite bool
+	symbol string
+	mappedSymbol string
+}
+
 func (d *delocation) processIntelInstruction(statement, instruction *node32) (*node32, error) {
 	assertNodeType(instruction, ruleInstructionName)
 	instructionName := d.contents(instruction)
@@ -1479,7 +1534,34 @@ Args:
 
 			switch section {
 			case "":
-				if _, knownSymbol := d.symbols[symbol]; knownSymbol {
+				if _, knownSymbol := d.relroLocalLabelToFuncMap[symbol]; knownSymbol {
+					// Assume:
+					// 	movq .Labc(%rip), %xmm
+					// relroLocalLabelToFuncMap contains the mapping .Labc->foo.
+					// Transform to
+					// 	leaq .Lfoo_local_target(%rip), %reg
+					// 	movq %reg, %xmm
+					// First sanity check number of arguments
+					if len(argNodes) != 2 {
+						panic(fmt.Sprintf("Expected only two arguments\n"))
+					}
+
+					// Get the function symbol that appears in a relro section
+					symbol = localTargetName(d.relroLocalLabelToFuncMap[symbol])
+
+					// Transform the opcode and arguments
+					instructionName = "leaq"
+					targetReg := d.contents(argNodes[1])
+					saveRegWrapper, tempReg := saveRegister(d.output, []string{""})
+					wrappers = append(wrappers, saveRegWrapper)
+					wrappers = append(wrappers, func(k func()) {
+											d.output.WriteString(fmt.Sprintf("\tleaq\t%s(%%rip), %s\n", symbol, tempReg))
+											d.output.WriteString(fmt.Sprintf("\tmovq\t%s, %s\n", tempReg, targetReg))
+										})
+					// This will cause the "replacement" string to be set below. But since
+					// we are using wrappers, it's not used.
+					changed = true
+				} else if _, knownSymbol := d.symbols[symbol]; knownSymbol {
 					symbol = localTargetName(symbol)
 					changed = true
 				}
@@ -1906,6 +1988,31 @@ func findLocalLabelsForRelro(file string, node *node32, relroLocalLabelToFuncMap
 
   	// First, we search for a local symbol
   	localSymbolName := ""
+
+  	if matchPatternSearchSubtree(currentLineRootNode.up, func(node *node32) bool {
+  			directiveName := file[node.begin:node.end];
+  			if directiveName == ".set" {
+  				return true
+  			}
+  			return false
+  		}, ruleLabelContainingDirective, ruleLabelContainingDirectiveName) {
+
+  		if !matchPatternSearchSubtree(currentLineRootNode.up, func(node *node32) bool {
+  				labelNames := strings.Split(file[node.begin:node.end], ",")
+  				if _, exists := relroLocalLabelToFuncMap[labelNames[1]]; !exists {
+  					return true
+  					//panic(fmt.Sprintf("Label %q must exist in relroLocalLabelToFuncMap\n", labelNames[1]))
+  				}
+  				relroLocalLabelToFuncMap[labelNames[0]] = relroLocalLabelToFuncMap[labelNames[1]]
+  				return true
+  			}, ruleLabelContainingDirective, ruleSymbolArgs) {
+  			panic(fmt.Sprintf("Not expected\n"))
+  		}
+
+  		continue
+  	}
+
+
   	if matchPatternSearchSubtree(currentLineRootNode.up, func(node *node32) bool {
   			symbolName := file[node.begin:node.end];
   			if _, exists := relroLocalLabelToFuncMap[symbolName]; exists {
@@ -1936,8 +2043,10 @@ func findLocalLabelsForRelro(file string, node *node32, relroLocalLabelToFuncMap
   				relroLocalLabelToFuncMap[localSymbolName] = file[node.begin:node.end]
   				return true
   			}, ruleLabelContainingDirective, ruleSymbolArgs) {
-  			panic(fmt.Sprintf("After finding %q under a .data.rel.ro[.local] section, expected to find a function name\n", symbolName))
+  			panic(fmt.Sprintf("After finding %q under a .data.rel.ro[.local] section, expected to find a function name\n", localSymbolName))
   		}
+
+  		continue
   	}
 
   	// Check if we are at the end of the relro section.
@@ -1977,11 +2086,6 @@ func relroLocalLabelToFuncMapping(input inputFile, relroLocalLabelToFuncMap map[
 			ruleStatement, ruleDirective, ruleArgs, ruleArg) {
 			findLocalLabelsForRelro(input.contents, currentLineRootNode.next, relroLocalLabelToFuncMap)
 		}
-	}
-
-  fmt.Printf("relroLocalLabelToFuncMap map:\n")
-  for key, value := range relroLocalLabelToFuncMap {
-    fmt.Printf("%s: %s\n", key, value)
 	}
 }
 
@@ -2098,6 +2202,7 @@ func transform(w stringWriter, includes []string, inputs []inputFile, startEndDe
 		commentIndicator:    commentIndicator,
 		output:              w,
 		cpuCapUniqueSymbols: []*cpuCapUniqueSymbol{},
+		relroLocalLabelToFuncMap: relroLocalLabelToFuncMap,
 		redirectors:         make(map[string]string),
 		bssAccessorsNeeded:  make(map[string]string),
 		tocLoaders:          make(map[string]struct{}),
