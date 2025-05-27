@@ -149,7 +149,7 @@ diff --color -Naur a/src/event/quic/ngx_event_quic_protection.c b/src/event/quic
          /* no EVP interface */
          s->hp_ctx = NULL;
 @@ -615,7 +615,7 @@
-
+ 
      ctx = s->hp_ctx;
  
 -#ifdef OPENSSL_IS_BORINGSSL

@@ -64,7 +64,6 @@ mainSteps:
             apt-get -y install unzip
             curl "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_CLI_PREFIX}64.zip" -o "awscliv2.zip"
             unzip -q awscliv2.zip
-
             ./aws/install
             # Check if the source code is on S3, otherwise treat the source as a PR.
             if [ "$(expr substr "$SOURCE" 1 16)" = "aws-lc-codebuild" ]; then
@@ -80,7 +79,7 @@ mainSteps:
                 exit 1
               fi
             fi
-
+            
             # install docker if its not already installed
             chmod +x ./tests/ci/benchmark_framework/install_docker.sh
             ./tests/ci/benchmark_framework/install_docker.sh

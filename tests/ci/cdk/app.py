@@ -9,7 +9,6 @@ from cdk.linux_docker_image_batch_build_stack import LinuxDockerImageBatchBuildS
 from pipeline.ci_util import add_ci_stacks
 from pipeline.pipeline_stack import AwsLcCiPipeline
 from cdk.windows_docker_image_build_stack import WindowsDockerImageBuildStack
-from cdk.aws_lc_github_ci_x509_stack import AwsLcGitHubX509CIStack
 from cdk.ecr_stack import EcrStack
 from util.metadata import (
     LINUX_X86_ECR_REPO,
