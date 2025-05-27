@@ -181,12 +181,6 @@ int ASN1_get_object(const unsigned char **inp, long *out_len, int *out_tag,
   return constructed;
 }
 
-int ASN1_get_object(const unsigned char **inp, long *out_len, int *out_tag,
-                    int *out_class, long in_len) {
-  return asn1_get_object_maybe_indefinite(inp, out_len, out_tag, out_class, in_len,
-    /*indefinite_ok=*/1);
-}
-
 // class 0 is constructed constructed == 2 for indefinite length constructed
 void ASN1_put_object(unsigned char **pp, int constructed, int length, int tag,
                      int xclass) {
