@@ -63,6 +63,7 @@
 #include <openssl/err.h>
 #include <openssl/mem.h>
 
+#include "../bytestring/internal.h"
 #include "../internal.h"
 #include "internal.h"
 #include "../bytestring/internal.h"
@@ -114,9 +115,21 @@ OPENSSL_DECLARE_ERROR_REASON(ASN1, UNSUPPORTED_TYPE)
 
 static void asn1_put_length(unsigned char **pp, int length);
 
-int asn1_get_object_maybe_indefinite(const unsigned char **inp, long *out_len,
-                                     int *out_tag, int *out_class, long in_len,
-                                     int indefinite_ok) {
+// |ASN1_get_object| parses an ASN.1 header, including tag, class, and length
+// information. The tag number is written to |*out_tag|. The class is written to
+// |*out_class|. If the tag is not indefinite, the content length is written to
+// |*out_len|. If the tag indicates the indefinite form, |*out_len| is set to 0.
+// |inp| is advanced past the header in the input buffer.
+//
+// Indefinite-length encoding and universal tags are always allowed to align
+// with OpenSSL behavior.
+//
+// The return value may have the following bits set:
+//   * 0x80: error occurred while parsing.
+//   * 0x20: the encoding is constructed, not primitive.
+//   * 0x01: indefinite-length constructed encoding.
+int ASN1_get_object(const unsigned char **inp, long *out_len, int *out_tag,
+                    int *out_class, long in_len) {
   if (in_len < 0) {
     OPENSSL_PUT_ERROR(ASN1, ASN1_R_HEADER_TOO_LONG);
     return 0x80;
@@ -137,8 +150,8 @@ int asn1_get_object_maybe_indefinite(const unsigned char **inp, long *out_len,
   int ber_found_temp;
   if (!cbs_get_any_asn1_element(&cbs, &body, &tag, &header_len, &ber_found_temp,
                                 &indefinite, /*ber_ok=*/1,
-                                /*universal_tag_ok=*/indefinite_ok) ||
-      (indefinite && !indefinite_ok) || !CBS_skip(&body, header_len) ||
+                                /*universal_tag_ok=*/1) ||
+      !CBS_skip(&body, header_len) ||
       // Bound the length to comfortably fit in an int. Lengths in this
       // module often switch between int and long without overflow checks.
       CBS_len(&body) > INT_MAX / 2) {
