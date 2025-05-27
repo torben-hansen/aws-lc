@@ -202,6 +202,7 @@ if((((ARCH STREQUAL "x86_64") AND NOT MY_ASSEMBLER_IS_TOO_OLD_FOR_512AVX) OR
   set(S2N_BIGNUM_INCLUDE_DIR "${AWSLC_SOURCE_DIR}/third_party/s2n-bignum/s2n-bignum-imported/include")
 
   list(APPEND BCM_ASM_SOURCES
+
     ${S2N_BIGNUM_DIR}/p256/p256_montjscalarmul.S
     ${S2N_BIGNUM_DIR}/p256/p256_montjscalarmul_alt.S
     ${S2N_BIGNUM_DIR}/p256/bignum_montinv_p256.S

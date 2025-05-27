@@ -10,7 +10,6 @@ diff --color -Naur a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl
  #include <openssl/hkdf.h>
  #include <openssl/chacha.h>
  #else
-
 diff --color -Naur a/src/event/quic/ngx_event_quic.c b/src/event/quic/ngx_event_quic.c
 --- a/src/event/quic/ngx_event_quic.c	2025-04-23 15:48:54.000000000 +0400
 +++ b/src/event/quic/ngx_event_quic.c	2025-04-26 21:38:24.905884275 +0400
@@ -23,7 +22,6 @@ diff --color -Naur a/src/event/quic/ngx_event_quic.c b/src/event/quic/ngx_event_
      /* OpenSSL provides read keys for an application level before it's ready */
  
      if (pkt->level == ssl_encryption_application && !c->ssl->handshaked) {
-
 diff --color -Naur a/src/event/quic/ngx_event_quic_protection.c b/src/event/quic/ngx_event_quic_protection.c
 --- a/src/event/quic/ngx_event_quic_protection.c	2025-04-23 15:48:54.000000000 +0400
 +++ b/src/event/quic/ngx_event_quic_protection.c	2025-04-26 22:30:58.506191433 +0400
@@ -159,7 +157,6 @@ diff --color -Naur a/src/event/quic/ngx_event_quic_protection.c b/src/event/quic
      uint32_t         cnt;
  
      if (ctx == NULL) {
-
 diff --color -Naur a/src/event/quic/ngx_event_quic_protection.h b/src/event/quic/ngx_event_quic_protection.h
 --- a/src/event/quic/ngx_event_quic_protection.h	2025-04-23 15:48:54.000000000 +0400
 +++ b/src/event/quic/ngx_event_quic_protection.h	2025-04-26 21:55:34.479043252 +0400
@@ -172,7 +169,6 @@ diff --color -Naur a/src/event/quic/ngx_event_quic_protection.h b/src/event/quic
  #define ngx_quic_cipher_t             EVP_AEAD
  #define ngx_quic_crypto_ctx_t         EVP_AEAD_CTX
  #else
-
 diff --color -Naur a/src/event/quic/ngx_event_quic_ssl.c b/src/event/quic/ngx_event_quic_ssl.c
 --- a/src/event/quic/ngx_event_quic_ssl.c	2025-04-23 15:48:54.000000000 +0400
 +++ b/src/event/quic/ngx_event_quic_ssl.c	2025-04-26 22:38:34.152015187 +0400
@@ -193,7 +189,6 @@ diff --color -Naur a/src/event/quic/ngx_event_quic_ssl.c b/src/event/quic/ngx_ev
      if (SSL_set_quic_early_data_context(ssl_conn, p, clen) == 0) {
          ngx_log_error(NGX_LOG_INFO, c->log, 0,
                        "quic SSL_set_quic_early_data_context() failed");
-
 diff --color -Naur a/src/http/ngx_http_request.c b/src/http/ngx_http_request.c
 --- a/src/http/ngx_http_request.c	2025-04-23 15:48:54.000000000 +0400
 +++ b/src/http/ngx_http_request.c	2025-04-26 21:38:47.476172719 +0400
@@ -206,7 +201,6 @@ diff --color -Naur a/src/http/ngx_http_request.c b/src/http/ngx_http_request.c
  
      /*
       * SSL_SESSION_get0_hostname() is only available in OpenSSL 1.1.1+,
-
 diff --color -Naur a/src/stream/ngx_stream_ssl_module.c b/src/stream/ngx_stream_ssl_module.c
 --- a/src/stream/ngx_stream_ssl_module.c	2025-04-23 15:48:54.000000000 +0400
 +++ b/src/stream/ngx_stream_ssl_module.c	2025-04-26 21:55:53.449285719 +0400
