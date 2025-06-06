@@ -2626,10 +2626,12 @@ func main() {
 	ccFlags := flag.String("cc-flags", "", "Flags for the C compiler when preprocessing")
 	s2nBignumInclude := flag.String("s2n-bignum-include", "", "Directory with s2n-bignum header files used by the C compiler when preprocessing")
 	noStartEndDebugDirectives := flag.Bool("no-se-debug-directives", false, "Disables .file/.loc directives on boundary start and end symbols")
+	printAST := flag.String("print-ast", "", "Print AST for specified file and line range (format: filename:start-end)")
 
 	flag.Parse()
 
-	if len(*outFile) == 0 {
+	// Only require the -o flag if we're not just printing the AST
+	if len(*outFile) == 0 && *printAST == "" {
 		fmt.Fprintf(os.Stderr, "Must give argument to -o.\n")
 		os.Exit(1)
 	}
@@ -2697,6 +2699,16 @@ func main() {
 	if err := parseInputs(inputs, cppCommand); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
+	}
+
+	// If --print-ast flag is set, print the AST for the specified file and line range
+	if *printAST != "" {
+		if err := printFilteredAST(inputs, *printAST); err != nil {
+			fmt.Fprintf(os.Stderr, "Error printing AST: %s\n", err)
+			os.Exit(1)
+		}
+		// Exit after printing AST
+		return
 	}
 
 	out, err := os.OpenFile(*outFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
@@ -2907,4 +2919,193 @@ func sortedSet(m map[string]struct{}) []string {
 	}
 	sort.Strings(ret)
 	return ret
+}
+
+// printFilteredAST prints the AST for a specific file and line range.
+// The format of the flag value is "filename:start-end".
+func printFilteredAST(inputs []inputFile, flagValue string) error {
+	// Parse the flag value
+	parts := strings.Split(flagValue, ":")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid format for --print-ast flag, expected filename:start-end")
+	}
+	
+	filename := parts[0]
+	lineRange := parts[1]
+	
+	// Parse line range
+	rangeParts := strings.Split(lineRange, "-")
+	if len(rangeParts) != 2 {
+		return fmt.Errorf("invalid line range format, expected start-end")
+	}
+	
+	startLine, err := strconv.Atoi(rangeParts[0])
+	if err != nil {
+		return fmt.Errorf("invalid start line: %v", err)
+	}
+	
+	endLine, err := strconv.Atoi(rangeParts[1])
+	if err != nil {
+		return fmt.Errorf("invalid end line: %v", err)
+	}
+	
+	// Find the matching input file
+	var matchedInput *inputFile
+	for i := range inputs {
+		if filepath.Base(inputs[i].path) == filename {
+			matchedInput = &inputs[i]
+			break
+		}
+	}
+	
+	if matchedInput == nil {
+		return fmt.Errorf("file %s not found in inputs", filename)
+	}
+	
+	// Create an Asm instance with the file contents
+	asm := Asm{Buffer: matchedInput.contents, Pretty: true}
+	
+	// Initialize the AST parser
+	asm.Init()
+	if err := asm.Parse(); err != nil {
+		return fmt.Errorf("error parsing AST: %s", err)
+	}
+	
+	// Get the AST
+	ast := asm.AST()
+	
+	// Filter the AST based on line numbers
+	fmt.Printf("AST for %s (lines %d-%d):\n", filename, startLine, endLine)
+	
+	// Get the content lines
+	lines := strings.Split(matchedInput.contents, "\n")
+	
+	// Create a map to track nodes by line number
+	nodesByLine := make(map[int][]*node32)
+	
+	// First pass: collect all nodes by line number
+	if ast != nil && ast.pegRule == ruleAsmFile && ast.up != nil {
+		for statement := ast.up; statement != nil; statement = statement.next {
+			posMap := translatePositions([]rune(matchedInput.contents), []int{int(statement.begin)})
+			var line int
+			for _, pos := range posMap {
+				line = pos.line
+			}
+			
+			if line >= startLine && line <= endLine {
+				nodesByLine[line] = append(nodesByLine[line], statement)
+			}
+		}
+	}
+	
+	// Second pass: print nodes for each line in range
+	for line := startLine; line <= endLine; line++ {
+		if nodes, ok := nodesByLine[line]; ok {
+			// Get the actual content of the line
+			lineContent := ""
+			if line-1 < len(lines) {
+				lineContent = lines[line-1]
+			}
+			
+			// Print the line number and content as a comment
+			fmt.Printf("// Line %d: %s\n", line, lineContent)
+			
+			// Print each node for this line
+			printed := make(map[*node32]bool)
+			for _, node := range nodes {
+				// Only print the node itself, not its children
+				fmt.Printf("%s: %q\n", rul3s[node.pegRule], matchedInput.contents[node.begin:node.end])
+				
+				// Print the node's immediate children
+				if node.up != nil {
+					printNodeOnly(node.up, matchedInput.contents, printed, 1)
+				}
+			}
+			
+			// Add a blank line for readability
+			fmt.Println()
+		}
+	}
+	
+	return nil
+}
+
+// printNodeOnly prints only the node itself, not its children or siblings
+func printNodeOnly(node *node32, buffer string, printed map[*node32]bool, depth int) {
+	if node == nil || printed[node] {
+		return
+	}
+	
+	// Mark this node as printed
+	printed[node] = true
+	
+	// Print indentation based on depth
+	indent := strings.Repeat("  ", depth)
+	
+	// Print the node rule and content
+	nodeContent := buffer[node.begin:node.end]
+	fmt.Printf("%s%s: %q\n", indent, rul3s[node.pegRule], nodeContent)
+	
+	// Print the node's immediate children
+	if node.up != nil {
+		printNodeOnly(node.up, buffer, printed, depth+1)
+	}
+	
+	// Continue with siblings
+	if node.next != nil {
+		printNodeOnly(node.next, buffer, printed, depth)
+	}
+}
+
+// printNodeInRange recursively prints nodes that fall within the specified line range
+func printNodeInRange(node *node32, buffer string, printed map[*node32]bool, depth int) {
+	if node == nil || printed[node] {
+		return
+	}
+	
+	// Mark this node as printed
+	printed[node] = true
+	
+	// Print indentation based on depth
+	indent := strings.Repeat("  ", depth)
+	
+	// Print the node rule and content
+	nodeContent := buffer[node.begin:node.end]
+	fmt.Printf("%s%s: %q\n", indent, rul3s[node.pegRule], nodeContent)
+	
+	// Recursively print child nodes
+	if node.up != nil {
+		printNodeInRange(node.up, buffer, printed, depth+1)
+	}
+	
+	// Continue with siblings
+	if node.next != nil {
+		printNodeInRange(node.next, buffer, printed, depth)
+	}
+}
+
+// nodeOrChildrenInRange checks if the node or any of its children are within the specified line range
+func nodeOrChildrenInRange(node *node32, buffer string, startLine, endLine int) bool {
+	if node == nil {
+		return false
+	}
+	
+	// Check if this node is within the line range
+	posMap := translatePositions([]rune(buffer), []int{int(node.begin)})
+	var line int
+	for _, pos := range posMap {
+		line = pos.line
+	}
+	
+	if line >= startLine && line <= endLine {
+		return true
+	}
+	
+	// Check if any child nodes are within the line range
+	if node.up != nil && nodeOrChildrenInRange(node.up, buffer, startLine, endLine) {
+		return true
+	}
+	
+	// We don't check siblings here because they're handled by the caller
+	return false
 }
