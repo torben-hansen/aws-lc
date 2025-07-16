@@ -73,9 +73,9 @@
 #endif
 
 #if defined(FIPS_ENTROPY_SOURCE_JITTER_CPU)
-static const unsigned kReseedInterval = 16777216;
+static const unsigned kReseedInterval = 1;
 #elif defined(FIPS_ENTROPY_SOURCE_PASSIVE)
-static const unsigned kReseedInterval = 4096;
+static const unsigned kReseedInterval = 1;
 #else
 #error "A FIPS entropy source must be explicitly defined"
 #endif
@@ -85,7 +85,7 @@ static const unsigned kReseedInterval = 4096;
 #if defined(FIPS_ENTROPY_SOURCE_JITTER_CPU) || defined(FIPS_ENTROPY_SOURCE_PASSIVE)
 #error "A FIPS entropy source must not be defined for non-FIPS build"
 #endif
-static const unsigned kReseedInterval = 4096;
+static const unsigned kReseedInterval = 1;
 
 #endif // defined(BORINGSSL_FIPS)
 
