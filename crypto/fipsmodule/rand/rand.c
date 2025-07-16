@@ -61,9 +61,9 @@
 // reseeding.
 
 #if defined(BORINGSSL_FIPS)
-static const unsigned kReseedInterval = 16777216;
+static const unsigned kReseedInterval = 1;
 #else
-static const unsigned kReseedInterval = 4096;
+static const unsigned kReseedInterval = 1;
 #endif
 
 // CRNGT_BLOCK_SIZE is the number of bytes in a “block” for the purposes of the
