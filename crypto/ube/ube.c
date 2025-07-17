@@ -39,7 +39,7 @@ static struct CRYPTO_STATIC_MUTEX ube_lock = CRYPTO_STATIC_MUTEX_INIT;
 // Locking for testing-specific code. Don't use |ube_lock| to avoid any
 // potential for deadlocks.
 static struct CRYPTO_STATIC_MUTEX ube_testing_lock = CRYPTO_STATIC_MUTEX_INIT;
-static uint8_t ube_detection_unavailable = 0;
+static uint8_t ube_detection_unavailable = 1;
 static uint8_t allow_mocked_detection = 0;
 
 static uint64_t override_fork_generation_number = 0;
