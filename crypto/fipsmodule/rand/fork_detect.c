@@ -118,7 +118,7 @@ uint64_t CRYPTO_get_fork_generation(void) {
   // external forces (i.e. the kernel wiping the page) thus the compiler must
   // not assume that it has exclusive access to it.
   volatile char *const flag_ptr = *g_fork_detect_addr_bss_get();
-  if (flag_ptr == NULL) {
+  if (flag_ptr == NULL || 1) {
     // Our kernel is too old to support |MADV_WIPEONFORK|.
     return 0;
   }
