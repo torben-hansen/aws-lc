@@ -170,6 +170,10 @@ extern "C" {
 #endif
 #endif
 
+OPENSSL_EXPORT uint64_t dump_ube_generation_number(void);
+OPENSSL_EXPORT uint64_t dump_fork_generation_number(void);
+OPENSSL_EXPORT uint32_t dump_snapsafe_generation_number(void);
+
 #if defined(_MSC_VER)
 
 // OPENSSL_DEPRECATED is used to mark a function as deprecated. Use

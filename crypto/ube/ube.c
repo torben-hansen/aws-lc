@@ -280,3 +280,16 @@ void disable_mocked_ube_detection_FOR_TESTING(void) {
   set_fork_generation_number_FOR_TESTING(0);
   set_snapsafe_generation_number_FOR_TESTING(0);
 }
+
+#include <inttypes.h>
+uint64_t dump_ube_generation_number(void) {
+  return ube_global_state.generation_number;
+}
+
+uint64_t dump_fork_generation_number(void) {
+  return ube_global_state.cached_fork_gn;
+}
+
+uint32_t dump_snapsafe_generation_number(void) {
+  return ube_global_state.cached_snapsafe_gn;
+}
