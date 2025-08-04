@@ -139,6 +139,7 @@ OPENSSL_EXPORT int RAND_set_rand_method(const RAND_METHOD *);
 // RAND_keep_random_devices_open does nothing.
 OPENSSL_EXPORT OPENSSL_DEPRECATED void RAND_keep_random_devices_open(int a);
 
+OPENSSL_EXPORT uint64_t measure_jitter_entropy(void);
 
 #if defined(__cplusplus)
 }  // extern C

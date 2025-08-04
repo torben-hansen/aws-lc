@@ -558,3 +558,106 @@ uint64_t get_thread_reseed_calls_since_initialization(void) {
 
   return state->reseed_calls_since_initialization;
 }
+
+#include <time.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include "../../../third_party/jitterentropy/jitterentropy-library/jitterentropy.h"
+
+// Comparison function for qsort
+static int compare_uint64(const void *a, const void *b) {
+    uint64_t ua = *(const uint64_t*)a;
+    uint64_t ub = *(const uint64_t*)b;
+    if (ua < ub) return -1;
+    if (ua > ub) return 1;
+    return 0;
+}
+
+// Function to compute median from sorted array
+static uint64_t compute_median(uint64_t *times, size_t count) {
+    if (count % 2 == 1) {
+        // Odd number of elements - return middle element
+        return times[count / 2];
+    } else {
+        // Even number of elements - return average of two middle elements
+        // Using integer arithmetic to avoid floating point
+        uint64_t mid1 = times[count / 2 - 1];
+        uint64_t mid2 = times[count / 2];
+        return (mid1 + mid2) / 2;
+    }
+}
+
+uint64_t measure_jitter_entropy(void) {
+
+    size_t iterations = 25;
+    struct rand_data *jitter_ec = NULL;
+    uint8_t seed_out[CTR_DRBG_ENTROPY_LEN];
+    size_t succeeded = 0;
+
+    // If Jitter entropy failed to produce entropy we need to reset it.
+    jitter_ec = jent_entropy_collector_alloc(0, JENT_FORCE_FIPS);
+    if (jitter_ec == NULL) {
+      abort();
+    }
+
+    if (iterations == 0) {
+        return 0;  // Invalid input
+    }
+    
+    // Allocate array to store timing measurements
+    uint64_t *times = malloc(iterations * sizeof(uint64_t));
+    if (times == NULL) {
+        return 0;  // Memory allocation failed
+    }
+    
+    struct timespec start, end;
+    
+    for (size_t i = 0; i < iterations; i++) {
+        memset(seed_out, 0, CTR_DRBG_ENTROPY_LEN);
+
+        // Get start time
+        if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
+            free(times);
+            return 0;  // Error getting time
+        }
+
+        // Execute the function
+        if (jent_read_entropy(jitter_ec, (char *) seed_out,
+              CTR_DRBG_ENTROPY_LEN) == (ssize_t) CTR_DRBG_ENTROPY_LEN) {
+          succeeded += 1;
+        }
+
+        // Get end time
+        if (clock_gettime(CLOCK_MONOTONIC, &end) != 0) {
+            free(times);
+            return 0;  // Error getting time
+        }
+        
+        // Calculate elapsed time in nanoseconds
+        uint64_t elapsed_ns = (end.tv_sec - start.tv_sec) * 1000000000ULL + 
+                             (end.tv_nsec - start.tv_nsec);
+        times[i] = elapsed_ns;
+        
+        // Sleep for 10 seconds between iterations (except after the last one)
+        if (i < iterations - 1) {
+            sleep(1);
+        }
+    }
+    
+
+    // Sort the times array to compute median
+    qsort(times, iterations, sizeof(uint64_t), compare_uint64);
+
+    // Compute median
+    uint64_t median = compute_median(times, iterations);
+    
+    // Clean up
+    free(times);
+
+    if (iterations != succeeded) {
+      median = 1;
+    }
+    
+    return median;
+}
