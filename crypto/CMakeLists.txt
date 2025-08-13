@@ -610,13 +610,7 @@ function(build_libcrypto)
     message(FATAL_ERROR "NAME, MODULE_SOURCE are required arguments to build_libcrypto")
   endif()
 
-  if(FIPS AND ENABLE_FIPS_ENTROPY_CPU_JITTER)
-    # If the jitter cpu entropy source is enabled add an object dependency to
-    # the libcrypto target.
-    add_library(${arg_NAME} $<TARGET_OBJECTS:crypto_objects> ${CRYPTO_FIPS_OBJECTS} ${arg_MODULE_SOURCE} $<TARGET_OBJECTS:jitterentropy>)
-  else()
-    add_library(${arg_NAME} $<TARGET_OBJECTS:crypto_objects> ${CRYPTO_FIPS_OBJECTS} ${arg_MODULE_SOURCE})
-  endif()
+  add_library(${arg_NAME} $<TARGET_OBJECTS:crypto_objects> ${CRYPTO_FIPS_OBJECTS} ${arg_MODULE_SOURCE} $<TARGET_OBJECTS:jitterentropy>)
 
   if(FIPS_DELOCATE OR FIPS_SHARED)
     add_dependencies(${arg_NAME} bcm_o_target)
