@@ -83,8 +83,6 @@ BIO *BIO_new_mem_buf(const void *buf, ossl_ssize_t len) {
     return NULL;
   }
 
-  const size_t size = (len < 0) ? strlen((char *)buf) : (size_t)len;
-
   ret = BIO_new(BIO_s_mem());
   if (ret == NULL) {
     return NULL;

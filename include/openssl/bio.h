@@ -67,19 +67,6 @@
 #include <openssl/stack.h>
 #include <openssl/thread.h>
 
-#if defined(OPENSSL_WINDOWS)
-// Due to name conflicts, we must prevent "wincrypt.h" from being included
-#define NOCRYPT
-#include <winsock2.h>
-#include <ws2ipdef.h>
-#undef NOCRYPT
-#else
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
-#endif
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
