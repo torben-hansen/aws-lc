@@ -747,6 +747,7 @@ if(BUILD_TESTING)
   target_add_awslc_include_paths(TARGET ${MEM_TEST_EXEC} SCOPE PRIVATE)
   # mem_set_test.cc tests memory overrides via |CRYPTO_set_mem_functions|.
   add_test_executable(${MEM_SET_TEST_EXEC} mem_set_test.cc)
+  target_add_awslc_include_paths(TARGET ${MEM_SET_TEST_EXEC} SCOPE PRIVATE)
 
   # Test randomness generation
   add_test_executable(${RANDOM_ISOLATED_EXEC} fipsmodule/rand/rand_isolated_test.cc)

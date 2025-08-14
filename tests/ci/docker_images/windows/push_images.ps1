@@ -4,11 +4,6 @@
 . .\common.ps1
 
 $ECS_REPO=$args[0]
-$TAG_SUFFIX = if (-not [string]::IsNullOrEmpty($TRIGGER_TYPE) -and $TRIGGER_TYPE -eq "pipeline") {
-    "pending"
-} else {
-    "latest"
-}
 
 if ($args[0] -eq $null) {
     # This is a ECS repository in our CI account
