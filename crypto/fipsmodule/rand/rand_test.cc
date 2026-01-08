@@ -42,6 +42,7 @@ static void test_all_exported_functions(size_t request_len, uint8_t *out_buf,
   uint8_t user_pred_res[RAND_PRED_RESISTANCE_LEN]) {
   ASSERT_TRUE(RAND_bytes(out_buf, request_len));
   ASSERT_TRUE(RAND_priv_bytes(out_buf, request_len));
+  ASSERT_TRUE(RAND_public_bytes(out_buf, request_len));
   ASSERT_TRUE(RAND_pseudo_bytes(out_buf, request_len));
   ASSERT_TRUE(RAND_bytes_with_user_prediction_resistance(out_buf, request_len, user_pred_res));
 }
@@ -254,6 +255,19 @@ TEST_F(randTest, NotObviouslyBroken) {
   EXPECT_NE(Bytes(buf1), Bytes(buf2));
   EXPECT_NE(Bytes(buf1), Bytes(kZeros));
   EXPECT_NE(Bytes(buf2), Bytes(kZeros));
+
+  uint8_t buf3[256], buf4[256];
+  RAND_public_bytes(buf3, sizeof(buf3));
+  RAND_public_bytes(buf4, sizeof(buf4));
+
+  EXPECT_NE(Bytes(buf3), Bytes(buf4));
+  EXPECT_NE(Bytes(buf3), Bytes(kZeros));
+  EXPECT_NE(Bytes(buf4), Bytes(kZeros));
+
+  EXPECT_NE(Bytes(buf1), Bytes(buf3));
+  EXPECT_NE(Bytes(buf1), Bytes(buf4));
+  EXPECT_NE(Bytes(buf2), Bytes(buf3));
+  EXPECT_NE(Bytes(buf2), Bytes(buf4));
 }
 
 #if !defined(OPENSSL_WINDOWS) && !defined(OPENSSL_IOS) && \

@@ -482,7 +482,7 @@ static void rand_bytes_private(uint8_t *out, size_t out_len,
   }
 
   // Lock state here because CTR-DRBG-generate can be invoked multiple times
-  // and every successful invocation increments updates service indicator.
+  // and every successful invocation increments the service indicator.
   FIPS_service_indicator_lock_state();
 
   struct rand_thread_local_state *state =
@@ -494,6 +494,44 @@ static void rand_bytes_private(uint8_t *out, size_t out_len,
     state = OPENSSL_zalloc(sizeof(struct rand_thread_local_state));
     if (state == NULL ||
         CRYPTO_set_thread_local(OPENSSL_THREAD_LOCAL_PRIVATE_RAND, state,
+                                   rand_thread_local_state_free) != 1) {
+      abort();
+    }
+
+    rand_state_initialize(state);
+    thread_local_list_add_node(state);
+
+    ctr_drbg_state_is_fresh = 1;
+  }
+
+  rand_bytes_core(state, out, out_len, user_pred_resistance,
+    use_user_pred_resistance, ctr_drbg_state_is_fresh);
+
+  FIPS_service_indicator_unlock_state();
+  FIPS_service_indicator_update_state();
+}
+
+static void rand_bytes_public(uint8_t *out, size_t out_len,
+  const uint8_t user_pred_resistance[RAND_PRED_RESISTANCE_LEN],
+  int use_user_pred_resistance) {
+
+  if (out_len == 0) {
+    return;
+  }
+
+  // Lock state here because CTR-DRBG-generate can be invoked multiple times
+  // and every successful invocation increments the service indicator.
+  FIPS_service_indicator_lock_state();
+
+  struct rand_thread_local_state *state =
+      CRYPTO_get_thread_local(OPENSSL_THREAD_LOCAL_PUBLIC_RAND);
+
+  int ctr_drbg_state_is_fresh = 0;
+
+  if (state == NULL) {
+    state = OPENSSL_zalloc(sizeof(struct rand_thread_local_state));
+    if (state == NULL ||
+        CRYPTO_set_thread_local(OPENSSL_THREAD_LOCAL_PUBLIC_RAND, state,
                                    rand_thread_local_state_free) != 1) {
       abort();
     }
@@ -531,6 +569,13 @@ int RAND_bytes(uint8_t *out, size_t out_len) {
 
 int RAND_priv_bytes(uint8_t *out, size_t out_len) {
   return RAND_bytes(out, out_len);
+}
+
+int RAND_public_bytes(uint8_t *out, size_t out_len) {
+  static const uint8_t kZeroPredResistance[RAND_PRED_RESISTANCE_LEN] = {0};
+  rand_bytes_public(out, out_len, kZeroPredResistance,
+    RAND_NO_USER_PRED_RESISTANCE);
+  return 1;
 }
 
 int RAND_pseudo_bytes(uint8_t *out, size_t out_len) {
